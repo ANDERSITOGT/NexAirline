@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Armchair, Pencil, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,21 +23,21 @@ import {
 } from "@/components/ui/table";
 import { planes as seedPlanes, type Plane } from "../data1";
 import {
-  aerolineas as seedAir,
   mantenimientos as seedMant,
   seatTypeTotals,
   tiposAsiento as seedTipos,
-  type Aerolinea,
   type MantEstado,
   type MantTipo,
   type Mantenimiento,
   type TipoAsiento,
 } from "../data3";
 import { usuarios } from "../data2";
+import { createAirline, getAirlines, type Airline, type CreateAirlineDTO } from "../services/airlineService";
 
  type Tab = "aeronaves" | "aerolineas" | "mantenimiento" | "tipos";
 
 type Option = { value: number; label: string; sub?: string; meta?: string };
+type AirlineForm = Partial<CreateAirlineDTO> & { activo?: boolean; id?: number };
 
 const tabLabels: Record<Tab, string> = {
   aeronaves: "aeronave",
@@ -99,22 +99,36 @@ function StatusBadge({ value }: { value: string }) {
 export default function Fleet() {
   const [tab, setTab] = useState<Tab>("aeronaves");
   const [planes, setPlanes] = useState(seedPlanes);
-  const [air, setAir] = useState(seedAir);
+  const [airlines, setAirlines] = useState<Airline[]>([]);
+  const [isLoadingAirlines, setIsLoadingAirlines] = useState(true);
   const [mant, setMant] = useState(seedMant);
   const [tipos, setTipos] = useState(seedTipos);
   const [panel, setPanel] = useState<Tab | null>(null);
   const [fPlane, setFPlane] = useState<Partial<Plane>>({});
-  const [fAir, setFAir] = useState<Partial<Aerolinea>>({});
+  const [fAir, setFAir] = useState<AirlineForm>({});
   const [fMant, setFMant] = useState<Partial<Mantenimiento>>({});
   const [fTipo, setFTipo] = useState<Partial<TipoAsiento>>({});
   const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    const loadAirlines = async () => {
+      try {
+        setAirlines(await getAirlines());
+      } catch {
+        setNotice("No se pudieron cargar las aerolíneas");
+      } finally {
+        setIsLoadingAirlines(false);
+      }
+    };
+    void loadAirlines();
+  }, []);
 
   const commitPlanes = (next: Plane[]) => {
     seedPlanes.splice(0, seedPlanes.length, ...next);
     setPlanes(next);
   };
-  const airName = (id: number) => air.find((airline) => airline.id === id)?.nombre ?? "—";
-  const airOptions = air.filter((airline) => airline.activo).map((airline) => ({ value: airline.id, label: airline.nombre, sub: airline.pais, meta: airline.iata }));
+  const airName = (id: number) => airlines.find((airline) => airline.id === id)?.nombre ?? "—";
+  const airOptions = airlines.filter((airline) => airline.activo).map((airline) => ({ value: airline.id, label: airline.nombre, sub: airline.pais, meta: airline.codigoIata }));
   const planeOptions = planes.filter((plane) => plane.activo).map((plane) => ({ value: plane.id, label: plane.matricula, sub: plane.modelo, meta: `${plane.capacidad} pax` }));
   const isNew = (item: { id?: number }) => !item.id;
   const openNew = () => {
@@ -130,13 +144,21 @@ export default function Fleet() {
   const valid = panel === "aeronaves"
     ? !!fPlane.aerolinea && !!fPlane.matricula && (fPlane.capacidad ?? 0) > 0
     : panel === "aerolineas"
-      ? !!fAir.nombre && fAir.iata?.length === 2 && fAir.icao?.length === 3 && !!fAir.pais
+      ? !!fAir.nombre && fAir.codigoIata?.length === 2 && fAir.codigoIcao?.length === 3 && !!fAir.pais
       : panel === "mantenimiento"
         ? !!fMant.avion && !!fMant.descripcion && !!fMant.inicio && !!fMant.fin && fMant.fin >= fMant.inicio
         : !!fTipo.nombre;
-  const save = () => {
+  const save = async () => {
     if (panel === "aeronaves") upsert(planes, commitPlanes, { estado: "Operativa", modelo: fPlane.modelo ?? "", ...fPlane } as Partial<Plane>);
-    if (panel === "aerolineas") upsert(air, setAir, fAir);
+    if (panel === "aerolineas") {
+      try {
+        const created = await createAirline({ nombre: fAir.nombre!, codigoIata: fAir.codigoIata!, codigoIcao: fAir.codigoIcao!, pais: fAir.pais! });
+        setAirlines((current) => [...current, created]);
+      } catch {
+        setNotice("No se pudo crear la aerolínea");
+        return;
+      }
+    }
     if (panel === "mantenimiento") {
       upsert(mant, setMant, fMant);
       if (fMant.estado === "EN_CURSO") commitPlanes(planes.map((plane) => plane.id === fMant.avion ? { ...plane, estado: "Mantenimiento" } : plane));
@@ -175,7 +197,7 @@ export default function Fleet() {
           <TabsList className="h-auto w-full justify-start rounded-none border-b border-border bg-transparent p-0">
             {[
               ["aeronaves", "Aeronaves", planes.length],
-              ["aerolineas", "Aerolíneas", air.length],
+              ["aerolineas", "Aerolíneas", airlines.length],
               ["mantenimiento", "Mantenimiento", mant.length],
               ["tipos", "Tipos de asiento", tipos.length],
             ].map(([value, label, count]) => (
@@ -194,7 +216,7 @@ export default function Fleet() {
           </TableBody></Table>
         )}
 
-        {tab === "aerolineas" && <Table><TableHeader><TableRow>{["Aerolínea", "IATA", "ICAO", "País", "Aeronaves", "Activa", ""].map((head) => <TableHead key={head}>{head}</TableHead>)}</TableRow></TableHeader><TableBody>{air.map((airline) => <TableRow key={airline.id}><TableCell className={`${tableCell} font-medium`}>{airline.nombre}</TableCell><TableCell className={`${tableCell} font-mono`}>{airline.iata}</TableCell><TableCell className={`${tableCell} font-mono`}>{airline.icao}</TableCell><TableCell className={`${tableCell} text-muted-foreground`}>{airline.pais}</TableCell><TableCell className={`${tableCell} font-mono`}>{planes.filter((plane) => plane.aerolinea === airline.id).length}</TableCell><TableCell className={tableCell}><Toggle checked={airline.activo} onChange={() => setAir(air.map((current) => current.id === airline.id ? { ...current, activo: !current.activo } : current))} label={`Activa ${airline.nombre}`} /></TableCell><TableCell className={`${tableCell} text-right`}><Button className="size-8 px-0" aria-label={`Editar ${airline.nombre}`} onClick={() => { setFAir(airline); setPanel("aerolineas"); }}><Pencil className="size-3.5" /></Button></TableCell></TableRow>)}</TableBody></Table>}
+        {tab === "aerolineas" && <Table><TableHeader><TableRow>{["Aerolínea", "IATA", "ICAO", "País", "Aeronaves", "Activa", ""].map((head) => <TableHead key={head}>{head}</TableHead>)}</TableRow></TableHeader><TableBody>{isLoadingAirlines ? <TableRow><TableCell colSpan={7} className="p-8 text-center text-muted-foreground">Cargando aerolíneas…</TableCell></TableRow> : airlines.map((airline) => <TableRow key={airline.id}><TableCell className={`${tableCell} font-medium`}>{airline.nombre}</TableCell><TableCell className={`${tableCell} font-mono`}>{airline.codigoIata}</TableCell><TableCell className={`${tableCell} font-mono`}>{airline.codigoIcao}</TableCell><TableCell className={`${tableCell} text-muted-foreground`}>{airline.pais}</TableCell><TableCell className={`${tableCell} font-mono`}>{planes.filter((plane) => plane.aerolinea === airline.id).length}</TableCell><TableCell className={tableCell}><Toggle checked={airline.activo} onChange={() => setAirlines(airlines.map((current) => current.id === airline.id ? { ...current, activo: !current.activo } : current))} label={`Activa ${airline.nombre}`} /></TableCell><TableCell className={`${tableCell} text-right`} /></TableRow>)}</TableBody></Table>}
 
         {tab === "mantenimiento" && <><div className="border-b border-border bg-accent/5 px-4 py-2.5 text-xs text-muted-foreground">Tabla propuesta <span className="font-mono text-foreground">Mantenimiento</span> (no existe en el esquema actual). Mientras haya una orden EN_CURSO, la aeronave no puede asignarse a vuelos nuevos.</div><Table><TableHeader><TableRow>{["Aeronave", "Tipo", "Trabajo", "Inicio", "Fin estimado", "Estado", "Responsable", ""].map((head) => <TableHead key={head}>{head}</TableHead>)}</TableRow></TableHeader><TableBody>{mant.map((maintenance) => <TableRow key={maintenance.id}><TableCell className={`${tableCell} font-mono font-semibold`}>{planes.find((plane) => plane.id === maintenance.avion)?.matricula}</TableCell><TableCell className={tableCell}><StatusBadge value={maintenance.tipo} /></TableCell><TableCell className={tableCell}>{maintenance.descripcion}</TableCell><TableCell className={`${tableCell} font-mono`}>{maintenance.inicio}</TableCell><TableCell className={`${tableCell} font-mono`}>{maintenance.fin}</TableCell><TableCell className={tableCell}><StatusBadge value={maintenance.estado} /></TableCell><TableCell className={`${tableCell} text-muted-foreground`}>{usuarios.find((user) => user.id === maintenance.responsable)?.nombre}</TableCell><TableCell className={`${tableCell} whitespace-nowrap text-right`}>{maintenance.estado === "EN_CURSO" && <Button className="mr-1 h-8" onClick={() => { setMant(mant.map((current) => current.id === maintenance.id ? { ...current, estado: "COMPLETADO" } : current)); commitPlanes(planes.map((plane) => plane.id === maintenance.avion ? { ...plane, estado: "Operativa" } : plane)); setNotice("Mantenimiento completado · aeronave operativa"); }}>Completar</Button>}<Button className="size-8 px-0" aria-label="Editar" onClick={() => { setFMant(maintenance); setPanel("mantenimiento"); }}><Pencil className="size-3.5" /></Button></TableCell></TableRow>)}</TableBody></Table></>}
 
@@ -206,7 +228,7 @@ export default function Fleet() {
           <SheetHeader><SheetTitle>{panel && `${panel === "aeronaves" ? isNew(fPlane) ? "Nueva" : "Editar" : panel === "aerolineas" ? isNew(fAir) ? "Nueva" : "Editar" : panel === "mantenimiento" ? isNew(fMant) ? "Nuevo" : "Editar" : isNew(fTipo) ? "Nuevo" : "Editar"} ${tabLabels[panel]}`}</SheetTitle><SheetDescription>Gestiona los datos del catálogo seleccionado.</SheetDescription></SheetHeader>
           <div className="grid gap-4 py-6">
             {panel === "aeronaves" && <><Field label="Aerolínea"><SelectField options={airOptions} value={fPlane.aerolinea ?? null} onChange={(value) => setFPlane({ ...fPlane, aerolinea: value ?? undefined })} placeholder="Seleccionar aerolínea…" /></Field><Field label="Matrícula"><input className="h-10 w-full rounded-md border border-input bg-background px-3 font-mono text-sm" value={fPlane.matricula ?? ""} onChange={(event) => setFPlane({ ...fPlane, matricula: event.target.value.toUpperCase() })} placeholder="N-AX600" /></Field><Field label="Nombre / modelo"><input className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={fPlane.modelo ?? ""} onChange={(event) => setFPlane({ ...fPlane, modelo: event.target.value })} placeholder="Airbus A320neo" /></Field><Field label="Capacidad (asientos)" hint="Genera el inventario de asientos al programar vuelos."><input type="number" min={1} className="h-10 w-full rounded-md border border-input bg-background px-3 font-mono text-sm" value={fPlane.capacidad ?? ""} onChange={(event) => setFPlane({ ...fPlane, capacidad: Number(event.target.value) })} /></Field><div className="flex items-center justify-between"><div><div className="text-sm font-medium">Aeronave activa</div><div className="text-xs text-muted-foreground">Las inactivas no aparecen al programar vuelos.</div></div><Toggle checked={!!fPlane.activo} onChange={(value) => setFPlane({ ...fPlane, activo: value })} label="Aeronave activa" /></div></>}
-            {panel === "aerolineas" && <><Field label="Nombre"><input className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={fAir.nombre ?? ""} onChange={(event) => setFAir({ ...fAir, nombre: event.target.value })} /></Field><div className="grid grid-cols-2 gap-4"><Field label="IATA" hint="2 letras"><input maxLength={2} className="h-10 w-full rounded-md border border-input bg-background px-3 font-mono text-sm" value={fAir.iata ?? ""} onChange={(event) => setFAir({ ...fAir, iata: event.target.value.toUpperCase() })} /></Field><Field label="ICAO" hint="3 letras"><input maxLength={3} className="h-10 w-full rounded-md border border-input bg-background px-3 font-mono text-sm" value={fAir.icao ?? ""} onChange={(event) => setFAir({ ...fAir, icao: event.target.value.toUpperCase() })} /></Field></div><Field label="País"><input className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={fAir.pais ?? ""} onChange={(event) => setFAir({ ...fAir, pais: event.target.value })} /></Field><div className="flex items-center justify-between"><span className="text-sm font-medium">Aerolínea activa</span><Toggle checked={!!fAir.activo} onChange={(value) => setFAir({ ...fAir, activo: value })} label="Aerolínea activa" /></div></>}
+            {panel === "aerolineas" && <><Field label="Nombre"><input className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={fAir.nombre ?? ""} onChange={(event) => setFAir({ ...fAir, nombre: event.target.value })} /></Field><div className="grid grid-cols-2 gap-4"><Field label="IATA" hint="2 letras"><input maxLength={2} className="h-10 w-full rounded-md border border-input bg-background px-3 font-mono text-sm" value={fAir.codigoIata ?? ""} onChange={(event) => setFAir({ ...fAir, codigoIata: event.target.value.toUpperCase() })} /></Field><Field label="ICAO" hint="3 letras"><input maxLength={3} className="h-10 w-full rounded-md border border-input bg-background px-3 font-mono text-sm" value={fAir.codigoIcao ?? ""} onChange={(event) => setFAir({ ...fAir, codigoIcao: event.target.value.toUpperCase() })} /></Field></div><Field label="País"><input className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={fAir.pais ?? ""} onChange={(event) => setFAir({ ...fAir, pais: event.target.value })} /></Field><div className="flex items-center justify-between"><span className="text-sm font-medium">Aerolínea activa</span><Toggle checked={!!fAir.activo} onChange={(value) => setFAir({ ...fAir, activo: value })} label="Aerolínea activa" /></div></>}
             {panel === "mantenimiento" && <><Field label="Aeronave"><SelectField options={planeOptions} value={fMant.avion ?? null} onChange={(value) => setFMant({ ...fMant, avion: value ?? undefined })} placeholder="Seleccionar matrícula…" /></Field><div className="grid grid-cols-2 gap-4"><Field label="Tipo"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={fMant.tipo ?? "PREVENTIVO"} onChange={(event) => setFMant({ ...fMant, tipo: event.target.value as MantTipo })}>{["PREVENTIVO", "CORRECTIVO", "INSPECCION"].map((type) => <option key={type}>{type}</option>)}</select></Field><Field label="Estado"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={fMant.estado ?? "PROGRAMADO"} onChange={(event) => setFMant({ ...fMant, estado: event.target.value as MantEstado })}>{["PROGRAMADO", "EN_CURSO", "COMPLETADO"].map((state) => <option key={state}>{state}</option>)}</select></Field></div><Field label="Descripción del trabajo"><input className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={fMant.descripcion ?? ""} onChange={(event) => setFMant({ ...fMant, descripcion: event.target.value })} /></Field><div className="grid grid-cols-2 gap-4"><Field label="Inicio"><input type="date" className="h-10 w-full rounded-md border border-input bg-background px-3 font-mono text-sm" value={fMant.inicio ?? ""} onChange={(event) => setFMant({ ...fMant, inicio: event.target.value })} /></Field><Field label="Fin estimado" hint={fMant.inicio && fMant.fin && fMant.fin < fMant.inicio ? "Debe ser posterior al inicio." : undefined}><input type="date" className="h-10 w-full rounded-md border border-input bg-background px-3 font-mono text-sm" value={fMant.fin ?? ""} onChange={(event) => setFMant({ ...fMant, fin: event.target.value })} /></Field></div><Field label="Responsable"><SelectField options={usuarios.filter((user) => user.activo).map((user) => ({ value: user.id, label: user.nombre, sub: user.correo }))} value={fMant.responsable ?? null} onChange={(value) => setFMant({ ...fMant, responsable: value ?? undefined })} placeholder="Seleccionar usuario…" /></Field></>}
             {panel === "tipos" && <><Field label="Nombre"><input className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={fTipo.nombre ?? ""} onChange={(event) => setFTipo({ ...fTipo, nombre: event.target.value })} /></Field><Field label="Descripción"><input className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={fTipo.descripcion ?? ""} onChange={(event) => setFTipo({ ...fTipo, descripcion: event.target.value })} /></Field></>}
           </div>
