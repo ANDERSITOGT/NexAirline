@@ -9,6 +9,8 @@ import SeatMap from "@/components/SeatMap";
 import Infrastructure from "@/components/Infrastructure";
 import Reservations from "@/components/Reservations";
 import Payments from "@/components/Payments";
+import Security from "@/components/Security";
+import Audit from "@/components/Audit";
 
 const page = (title: string) => (
   <div className="p-4 text-2xl font-bold">{title}</div>
@@ -29,8 +31,8 @@ function App() {
           <Route path="infraestructura" element={<Infrastructure />} />
           <Route path="reservas" element={<Reservations />} />
           <Route path="pagos" element={<Payments />} />
-          <Route path="seguridad" element={page("Roles y errores")} />
-          <Route path="bitacora" element={page("Bitácora de asientos")} />
+          <Route path="seguridad" element={<Security />} />
+          <Route path="bitacora" element={<Audit />} />
           <Route path="modelo" element={page("Modelo de datos")} />
         </Route>
       </Routes>
