@@ -32,7 +32,7 @@ import {
   type TipoAsiento,
 } from "../data3";
 import { usuarios } from "../data2";
-import { createAirline, getAirlines, type Airline, type CreateAirlineDTO } from "../services/airlineService";
+import { createAirline, getAirlines, updateAirline, type Airline, type CreateAirlineDTO } from "../services/airlineService";
 
  type Tab = "aeronaves" | "aerolineas" | "mantenimiento" | "tipos";
 
@@ -152,8 +152,14 @@ export default function Fleet() {
     if (panel === "aeronaves") upsert(planes, commitPlanes, { estado: "Operativa", modelo: fPlane.modelo ?? "", ...fPlane } as Partial<Plane>);
     if (panel === "aerolineas") {
       try {
-        const created = await createAirline({ nombre: fAir.nombre!, codigoIata: fAir.codigoIata!, codigoIcao: fAir.codigoIcao!, pais: fAir.pais! });
-        setAirlines((current) => [...current, created]);
+        const payload = { nombre: fAir.nombre!, codigoIata: fAir.codigoIata!, codigoIcao: fAir.codigoIcao!, pais: fAir.pais!, activo: fAir.activo };
+        if (fAir.id && fAir.id > 0) {
+          const updated = await updateAirline(fAir.id, payload);
+          setAirlines((current) => current.map((airline) => airline.id === updated.id ? updated : airline));
+        } else {
+          const created = await createAirline(payload);
+          setAirlines((current) => [...current, created]);
+        }
       } catch {
         setNotice("No se pudo crear la aerolínea");
         return;
@@ -216,7 +222,7 @@ export default function Fleet() {
           </TableBody></Table>
         )}
 
-        {tab === "aerolineas" && <Table><TableHeader><TableRow>{["Aerolínea", "IATA", "ICAO", "País", "Aeronaves", "Activa", ""].map((head) => <TableHead key={head}>{head}</TableHead>)}</TableRow></TableHeader><TableBody>{isLoadingAirlines ? <TableRow><TableCell colSpan={7} className="p-8 text-center text-muted-foreground">Cargando aerolíneas…</TableCell></TableRow> : airlines.map((airline) => <TableRow key={airline.id}><TableCell className={`${tableCell} font-medium`}>{airline.nombre}</TableCell><TableCell className={`${tableCell} font-mono`}>{airline.codigoIata}</TableCell><TableCell className={`${tableCell} font-mono`}>{airline.codigoIcao}</TableCell><TableCell className={`${tableCell} text-muted-foreground`}>{airline.pais}</TableCell><TableCell className={`${tableCell} font-mono`}>{planes.filter((plane) => plane.aerolinea === airline.id).length}</TableCell><TableCell className={tableCell}><Toggle checked={airline.activo} onChange={() => setAirlines(airlines.map((current) => current.id === airline.id ? { ...current, activo: !current.activo } : current))} label={`Activa ${airline.nombre}`} /></TableCell><TableCell className={`${tableCell} text-right`} /></TableRow>)}</TableBody></Table>}
+        {tab === "aerolineas" && <Table><TableHeader><TableRow>{["Aerolínea", "IATA", "ICAO", "País", "Aeronaves", "Activa", ""].map((head) => <TableHead key={head}>{head}</TableHead>)}</TableRow></TableHeader><TableBody>{isLoadingAirlines ? <TableRow><TableCell colSpan={7} className="p-8 text-center text-muted-foreground">Cargando aerolíneas…</TableCell></TableRow> : airlines.map((airline) => <TableRow key={airline.id}><TableCell className={`${tableCell} font-medium`}>{airline.nombre}</TableCell><TableCell className={`${tableCell} font-mono`}>{airline.codigoIata}</TableCell><TableCell className={`${tableCell} font-mono`}>{airline.codigoIcao}</TableCell><TableCell className={`${tableCell} text-muted-foreground`}>{airline.pais}</TableCell><TableCell className={`${tableCell} font-mono`}>{planes.filter((plane) => plane.aerolinea === airline.id).length}</TableCell><TableCell className={tableCell}><Toggle checked={airline.activo} onChange={async (active) => { try { const updated = await updateAirline(airline.id, { ...airline, activo: active }); setAirlines((current) => current.map((item) => item.id === updated.id ? updated : item)); } catch { setNotice("No se pudo actualizar el estado de la aerolínea"); } }} label={`Activa ${airline.nombre}`} /></TableCell><TableCell className={`${tableCell} text-right`} /></TableRow>)}</TableBody></Table>}
 
         {tab === "mantenimiento" && <><div className="border-b border-border bg-accent/5 px-4 py-2.5 text-xs text-muted-foreground">Tabla propuesta <span className="font-mono text-foreground">Mantenimiento</span> (no existe en el esquema actual). Mientras haya una orden EN_CURSO, la aeronave no puede asignarse a vuelos nuevos.</div><Table><TableHeader><TableRow>{["Aeronave", "Tipo", "Trabajo", "Inicio", "Fin estimado", "Estado", "Responsable", ""].map((head) => <TableHead key={head}>{head}</TableHead>)}</TableRow></TableHeader><TableBody>{mant.map((maintenance) => <TableRow key={maintenance.id}><TableCell className={`${tableCell} font-mono font-semibold`}>{planes.find((plane) => plane.id === maintenance.avion)?.matricula}</TableCell><TableCell className={tableCell}><StatusBadge value={maintenance.tipo} /></TableCell><TableCell className={tableCell}>{maintenance.descripcion}</TableCell><TableCell className={`${tableCell} font-mono`}>{maintenance.inicio}</TableCell><TableCell className={`${tableCell} font-mono`}>{maintenance.fin}</TableCell><TableCell className={tableCell}><StatusBadge value={maintenance.estado} /></TableCell><TableCell className={`${tableCell} text-muted-foreground`}>{usuarios.find((user) => user.id === maintenance.responsable)?.nombre}</TableCell><TableCell className={`${tableCell} whitespace-nowrap text-right`}>{maintenance.estado === "EN_CURSO" && <Button className="mr-1 h-8" onClick={() => { setMant(mant.map((current) => current.id === maintenance.id ? { ...current, estado: "COMPLETADO" } : current)); commitPlanes(planes.map((plane) => plane.id === maintenance.avion ? { ...plane, estado: "Operativa" } : plane)); setNotice("Mantenimiento completado · aeronave operativa"); }}>Completar</Button>}<Button className="size-8 px-0" aria-label="Editar" onClick={() => { setFMant(maintenance); setPanel("mantenimiento"); }}><Pencil className="size-3.5" /></Button></TableCell></TableRow>)}</TableBody></Table></>}
 
