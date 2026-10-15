@@ -1,27 +1,34 @@
 # Dependencies
 node_modules/
+.pnp/
+.pnp.js
+.yarn/cache/
+.yarn/unplugged/
+.yarn/install-state.gz
+.pnpm-store/
 
-# Production builds and Vite caches
+# Builds and bundler caches
 dist/
 dist-ssr/
 .vite/
+.cache/
+.turbo/
 
-# TypeScript caches
+# TypeScript, lint and test caches
 *.tsbuildinfo
 node_modules/.tmp/
-
-# Test and coverage output
+.eslintcache
 coverage/
 playwright-report/
 test-results/
 
-# Local environment files and machine-specific overrides
+# Environment files
 .env
 .env.*
 !.env.example
 *.local
 
-# Logs and package-manager debug files
+# Logs and debug output
 logs/
 *.log
 npm-debug.log*
