@@ -3,6 +3,7 @@ import Shell from "@/components/Shell";
 import Dashboard from "@/components/Dashboard";
 import Fleet from "@/components/Fleet";
 import Flights from "@/components/Flights";
+import Wizard from "@/components/Wizard";
 
 const page = (title: string) => (
   <div className="p-4 text-2xl font-bold">{title}</div>
@@ -16,7 +17,7 @@ function App() {
           <Route index element={<Navigate replace to="/dashboard" />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="vuelos" element={<Flights />} />
-          <Route path="vuelos/nuevo" element={page("Programar vuelo")} />
+          <Route path="vuelos/nuevo" element={<Wizard />} />
           <Route path="reasignaciones" element={page("Reasignaciones")} />
           <Route path="flota" element={<Fleet />} />
           <Route path="asientos" element={page("Mapa de asientos")} />
