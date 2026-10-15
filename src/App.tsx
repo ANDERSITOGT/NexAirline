@@ -11,10 +11,7 @@ import Reservations from "@/components/Reservations";
 import Payments from "@/components/Payments";
 import Security from "@/components/Security";
 import Audit from "@/components/Audit";
-
-const page = (title: string) => (
-  <div className="p-4 text-2xl font-bold">{title}</div>
-);
+import Schema from "@/components/Schema";
 
 function App() {
   return (
@@ -33,7 +30,7 @@ function App() {
           <Route path="pagos" element={<Payments />} />
           <Route path="seguridad" element={<Security />} />
           <Route path="bitacora" element={<Audit />} />
-          <Route path="modelo" element={page("Modelo de datos")} />
+          <Route path="modelo" element={<Schema />} />
         </Route>
       </Routes>
     </BrowserRouter>
