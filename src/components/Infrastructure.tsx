@@ -9,9 +9,10 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { gates as seedGateNumbers, routes as seedRoutes, fmtDuration, type Route } from "../data1";
-import { gateRows as seedGates, type GateRow } from "../data2";
+import { type Gate } from "../services/gateService";
 import { createAirport, getAirports, updateAirport, type Airport } from "../services/airportService";
 import { createTerminal, getTerminals, updateTerminal, type Terminal } from "../services/terminalService";
+import { createGate, getGates, updateGate } from "../services/gateService";
 
 type Tab = "aeropuertos" | "terminales" | "rutas" | "puertas";
 const tabs: { id: Tab; label: string; singular: string }[] = [
@@ -44,24 +45,27 @@ export default function Infrastructure() {
   const [terminals, setTerminals] = useState<Terminal[]>([]);
   const [isLoadingTerminals, setIsLoadingTerminals] = useState(true);
   const [routes, setRoutes] = useState(seedRoutes);
-  const [gates, setGates] = useState(seedGates);
+  const [gates, setGates] = useState<Gate[]>([]);
+  const [isLoadingGates, setIsLoadingGates] = useState(true);
   const [panel, setPanel] = useState<Tab | null>(null);
   const [airport, setAirport] = useState<AirportForm>(blankAirport);
   const [terminal, setTerminal] = useState<Partial<Terminal>>({ activo: true });
   const [route, setRoute] = useState<Partial<Route>>({ activa: true });
-  const [gate, setGate] = useState<Partial<GateRow>>({ activo: true });
+  const [gate, setGate] = useState<Partial<Gate>>({ activo: true });
   const [notice, setNotice] = useState("");
   useEffect(() => {
     const loadCatalogs = async () => {
       try {
-        const [loadedAirports, loadedTerminals] = await Promise.all([getAirports(), getTerminals()]);
+        const [loadedAirports, loadedTerminals, loadedGates] = await Promise.all([getAirports(), getTerminals(), getGates()]);
         setAirports(loadedAirports);
         setTerminals(loadedTerminals);
+        setGates(loadedGates);
       } catch {
         setNotice("No se pudieron cargar los catálogos de infraestructura");
       } finally {
         setIsLoadingAirports(false);
         setIsLoadingTerminals(false);
+        setIsLoadingGates(false);
       }
     };
     void loadCatalogs();
@@ -73,7 +77,7 @@ export default function Infrastructure() {
   const canSave = panel === "aeropuertos" ? !!airport.nombre && airport.iata.length === 3 && airport.icao.length === 4
     : panel === "terminales" ? !!terminal.aeropuertoId && !!terminal.nombre
     : panel === "rutas" ? !routeInvalid
-    : !!gate.terminal && !!gate.numero;
+    : !!gate.sedeId && !!gate.numero;
 
   const openNew = () => {
     if (tab === "aeropuertos") setAirport({ ...blankAirport, id: 0 });
@@ -120,7 +124,21 @@ export default function Infrastructure() {
       }
     }
     if (panel === "rutas") setRoutes((items) => [...items, { id, distancia: 0, ...route } as Route]);
-    if (panel === "puertas") setGates((items) => [...items, { id, descripcion: "", ...gate } as GateRow]);
+    if (panel === "puertas") {
+      try {
+        const payload = { sedeId: gate.sedeId!, numero: gate.numero!, descripcion: gate.descripcion };
+        if (gate.id && gate.id > 0) {
+          const updated = await updateGate(gate.id, { ...payload, activo: !!gate.activo });
+          setGates((items) => items.map((item) => item.id === updated.id ? updated : item));
+        } else {
+          const created = await createGate(payload);
+          setGates((items) => [...items, created]);
+        }
+      } catch {
+        setNotice("No se pudo guardar la puerta de embarque");
+        return;
+      }
+    }
     setTab(panel!);
     close();
   };
@@ -134,7 +152,7 @@ export default function Infrastructure() {
           <TabsContent value="aeropuertos" className="mt-0"><CatalogTable headings={["IATA", "Nombre", "Ubicación", "ICAO", "Activo", ""]}>{isLoadingAirports ? <TableRow><TableCell colSpan={6} className="p-8 text-center text-muted-foreground">Cargando aeropuertos…</TableCell></TableRow> : airports.map((item) => <TableRow key={item.id}><TableCell className={cellClass}><Badge>{item.codigoIata}</Badge></TableCell><TableCell className={`${cellClass} font-medium`}>{item.nombre}</TableCell><TableCell className={`${cellClass} text-muted-foreground`}>{item.ciudad}, {item.pais}</TableCell><TableCell className={`${cellClass} font-mono`}>{item.codigoIcao}</TableCell><TableCell className={cellClass}><Status active={!!item.activo} onChange={async (active) => { try { const updated = await updateAirport(item.id, { activo: active }); setAirports((items) => items.map((currentItem) => currentItem.id === updated.id ? updated : currentItem)); } catch { setNotice("No se pudo actualizar el estado del aeropuerto"); } }} label={`Activo ${item.codigoIata}`} /></TableCell><TableCell className={`${cellClass} text-right`}><Button variant="outline" size="icon" aria-label={`Editar ${item.codigoIata}`} onClick={() => { setAirport({ id: item.id, nombre: item.nombre, iata: item.codigoIata, icao: item.codigoIcao, ciudad: item.ciudad, pais: item.pais, direccion: item.direccion ?? "", activo: item.activo ?? true }); setPanel("aeropuertos"); }}><Pencil className="size-3.5" /></Button></TableCell></TableRow>)}</CatalogTable></TabsContent>
           <TabsContent value="terminales" className="mt-0"><CatalogTable headings={["Aeropuerto", "Terminal", "Descripción", "Activo", ""]}>{isLoadingTerminals ? <TableRow><TableCell colSpan={5} className="p-8 text-center text-muted-foreground">Cargando terminales…</TableCell></TableRow> : terminals.map((item) => <TableRow key={item.id}><TableCell className={`${cellClass} font-mono font-medium`}>{airportById(item.aeropuertoId)?.codigoIata ?? "—"}</TableCell><TableCell className={`${cellClass} font-medium`}>{item.nombre}</TableCell><TableCell className={`${cellClass} text-muted-foreground`}>{item.descripcion || "—"}</TableCell><TableCell className={cellClass}><Status active={item.activo} onChange={async (active) => { try { const updated = await updateTerminal(item.id, { aeropuertoId: item.aeropuertoId, nombre: item.nombre, descripcion: item.descripcion, activo: active }); setTerminals((items) => items.map((currentItem) => currentItem.id === updated.id ? updated : currentItem)); } catch { setNotice("No se pudo actualizar el estado de la terminal"); } }} label={`Activo ${item.nombre}`} /></TableCell><TableCell className={`${cellClass} text-right`}><Button variant="outline" size="icon" aria-label={`Editar ${item.nombre}`} onClick={() => { setTerminal({ ...item }); setPanel("terminales"); }}><Pencil className="size-3.5" /></Button></TableCell></TableRow>)}</CatalogTable></TabsContent>
           <TabsContent value="rutas" className="mt-0"><CatalogTable headings={["Origen", "Destino", "Duración est.", "Distancia", "Activa"]}>{routes.map((item) => <TableRow key={item.id}><TableCell className={cellClass}><span className="font-mono font-semibold">{airportById(item.origen)?.codigoIata}</span> <span className="text-muted-foreground">{airportById(item.origen)?.ciudad}</span></TableCell><TableCell className={cellClass}><span className="font-mono font-semibold">{airportById(item.destino)?.codigoIata}</span> <span className="text-muted-foreground">{airportById(item.destino)?.ciudad}</span></TableCell><TableCell className={`${cellClass} font-mono`}>{fmtDuration(item.duracion)}</TableCell><TableCell className={`${cellClass} font-mono`}>{item.distancia ? `${item.distancia.toLocaleString("es-GT")} km` : "—"}</TableCell><TableCell className={cellClass}><Status active={item.activa} onChange={(active) => setRoutes((items) => items.map((currentItem) => currentItem.id === item.id ? { ...currentItem, activa: active } : currentItem))} label="Ruta activa" /></TableCell></TableRow>)}</CatalogTable></TabsContent>
-          <TabsContent value="puertas" className="mt-0"><CatalogTable headings={["Terminal", "Puerta", "Descripción", "Activa"]}>{gates.map((item) => { const terminalItem = terminalById(item.terminal); return <TableRow key={item.id}><TableCell className={cellClass}><span className="font-mono font-semibold">{terminalItem ? airportById(terminalItem.aeropuertoId)?.codigoIata : "—"}</span> · {terminalItem?.nombre}</TableCell><TableCell className={`${cellClass} font-mono font-medium`}>{item.numero}</TableCell><TableCell className={`${cellClass} text-muted-foreground`}>{item.descripcion || "—"}</TableCell><TableCell className={cellClass}><Status active={item.activo} onChange={(active) => setGates((items) => items.map((currentItem) => currentItem.id === item.id ? { ...currentItem, activo: active } : currentItem))} label={`Activa ${item.numero}`} /></TableCell></TableRow>; })}</CatalogTable></TabsContent>
+          <TabsContent value="puertas" className="mt-0"><CatalogTable headings={["Terminal", "Puerta", "Descripción", "Activa", ""]}>{isLoadingGates ? <TableRow><TableCell colSpan={5} className="p-8 text-center text-muted-foreground">Cargando puertas…</TableCell></TableRow> : gates.map((item) => { const terminalItem = terminalById(item.sedeId); return <TableRow key={item.id}><TableCell className={cellClass}><span className="font-mono font-semibold">{terminalItem ? airportById(terminalItem.aeropuertoId)?.codigoIata : "—"}</span> · {terminalItem?.nombre}</TableCell><TableCell className={`${cellClass} font-mono font-medium`}>{item.numero}</TableCell><TableCell className={`${cellClass} text-muted-foreground`}>{item.descripcion || "—"}</TableCell><TableCell className={cellClass}><Status active={item.activo} onChange={async (active) => { try { const updated = await updateGate(item.id, { sedeId: item.sedeId, numero: item.numero, descripcion: item.descripcion, activo: active }); setGates((items) => items.map((currentItem) => currentItem.id === updated.id ? updated : currentItem)); } catch { setNotice("No se pudo actualizar el estado de la puerta"); } }} label={`Activa ${item.numero}`} /></TableCell><TableCell className={`${cellClass} text-right`}><Button variant="outline" size="icon" aria-label={`Editar ${item.numero}`} onClick={() => { setGate({ ...item }); setPanel("puertas"); }}><Pencil className="size-3.5" /></Button></TableCell></TableRow>; })}</CatalogTable></TabsContent>
         </CardContent>
       </Card>
     </Tabs>
@@ -143,7 +161,7 @@ export default function Infrastructure() {
       {panel === "aeropuertos" && <><Field label="Nombre"><Input value={airport.nombre} onChange={(event) => setAirport({ ...airport, nombre: event.target.value })} /></Field><div className="grid grid-cols-2 gap-4"><Field label="Código IATA" hint="3 letras"><Input maxLength={3} value={airport.iata} onChange={(event) => setAirport({ ...airport, iata: event.target.value.toUpperCase() })} className="font-mono" /></Field><Field label="Código ICAO" hint="4 letras"><Input maxLength={4} value={airport.icao} onChange={(event) => setAirport({ ...airport, icao: event.target.value.toUpperCase() })} className="font-mono" /></Field></div><div className="grid grid-cols-2 gap-4"><Field label="Ciudad"><Input value={airport.ciudad} onChange={(event) => setAirport({ ...airport, ciudad: event.target.value })} /></Field><Field label="País"><Input value={airport.pais} onChange={(event) => setAirport({ ...airport, pais: event.target.value })} /></Field></div><Field label="Dirección"><Input value={airport.direccion} onChange={(event) => setAirport({ ...airport, direccion: event.target.value })} /></Field><div className="flex items-center justify-between rounded-lg bg-background p-4"><span className="text-sm font-medium">Aeropuerto activo</span><Switch checked={airport.activo} onCheckedChange={(active) => setAirport({ ...airport, activo: active })} aria-label="Aeropuerto activo" /></div></>}
       {panel === "terminales" && <><Field label="Aeropuerto"><select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={terminal.aeropuertoId ?? ""} onChange={(event) => setTerminal({ ...terminal, aeropuertoId: Number(event.target.value) || undefined })}><option value="">Selecciona un aeropuerto</option>{airports.map((item) => <option key={item.id} value={item.id}>{item.codigoIata} · {item.nombre}</option>)}</select></Field><Field label="Nombre"><Input value={terminal.nombre ?? ""} onChange={(event) => setTerminal({ ...terminal, nombre: event.target.value })} /></Field><Field label="Descripción"><Input value={terminal.descripcion ?? ""} onChange={(event) => setTerminal({ ...terminal, descripcion: event.target.value })} /></Field><div className="flex items-center justify-between rounded-lg bg-background p-4"><span className="text-sm font-medium">Terminal activa</span><Switch checked={!!terminal.activo} onCheckedChange={(active) => setTerminal({ ...terminal, activo: active })} aria-label="Terminal activa" /></div></>}
       {panel === "rutas" && <><Field label="Aeropuerto de origen"><select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={route.origen ?? ""} onChange={(event) => setRoute({ ...route, origen: Number(event.target.value) || undefined })}><option value="">Selecciona origen</option>{airports.map((item) => <option key={item.id} value={item.id}>{item.codigoIata} · {item.ciudad}</option>)}</select></Field><Field label="Aeropuerto de destino"><select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={route.destino ?? ""} onChange={(event) => setRoute({ ...route, destino: Number(event.target.value) || undefined })}><option value="">Selecciona destino</option>{airports.filter((item) => item.id !== route.origen).map((item) => <option key={item.id} value={item.id}>{item.codigoIata} · {item.ciudad}</option>)}</select></Field><div className="grid grid-cols-2 gap-4"><Field label="Duración (min)"><Input type="number" min={1} value={route.duracion ?? ""} onChange={(event) => setRoute({ ...route, duracion: Number(event.target.value) || undefined })} className="font-mono" /></Field><Field label="Distancia (km)"><Input type="number" min={0} value={route.distancia ?? ""} onChange={(event) => setRoute({ ...route, distancia: Number(event.target.value) || 0 })} className="font-mono" /></Field></div><div className="flex items-center justify-between rounded-lg bg-background p-4"><span className="text-sm font-medium">Ruta activa</span><Switch checked={!!route.activa} onCheckedChange={(active) => setRoute({ ...route, activa: active })} aria-label="Ruta activa" /></div></>}
-      {panel === "puertas" && <><Field label="Terminal"><select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={gate.terminal ?? ""} onChange={(event) => setGate({ ...gate, terminal: Number(event.target.value) || undefined })}><option value="">Selecciona terminal</option>{terminals.map((item) => <option key={item.id} value={item.id}>{item.nombre} · {airportById(item.aeropuertoId)?.codigoIata}</option>)}</select></Field><Field label="Número de puerta"><Input list="gate-numbers" value={gate.numero ?? ""} onChange={(event) => setGate({ ...gate, numero: event.target.value.toUpperCase() })} className="font-mono" /><datalist id="gate-numbers">{seedGateNumbers.map((number) => <option key={number} value={number} />)}</datalist></Field><Field label="Descripción"><Input value={gate.descripcion ?? ""} onChange={(event) => setGate({ ...gate, descripcion: event.target.value })} /></Field><div className="flex items-center justify-between rounded-lg bg-background p-4"><span className="text-sm font-medium">Puerta activa</span><Switch checked={!!gate.activo} onCheckedChange={(active) => setGate({ ...gate, activo: active })} aria-label="Puerta activa" /></div></>}
+      {panel === "puertas" && <><Field label="Terminal"><select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={gate.sedeId ?? ""} onChange={(event) => setGate({ ...gate, sedeId: Number(event.target.value) || undefined })}><option value="">Selecciona terminal</option>{terminals.map((item) => <option key={item.id} value={item.id}>{item.nombre} · {airportById(item.aeropuertoId)?.codigoIata}</option>)}</select></Field><Field label="Número de puerta"><Input list="gate-numbers" value={gate.numero ?? ""} onChange={(event) => setGate({ ...gate, numero: event.target.value.toUpperCase() })} className="font-mono" /><datalist id="gate-numbers">{seedGateNumbers.map((number) => <option key={number} value={number} />)}</datalist></Field><Field label="Descripción"><Input value={gate.descripcion ?? ""} onChange={(event) => setGate({ ...gate, descripcion: event.target.value })} /></Field><div className="flex items-center justify-between rounded-lg bg-background p-4"><span className="text-sm font-medium">Puerta activa</span><Switch checked={!!gate.activo} onCheckedChange={(active) => setGate({ ...gate, activo: active })} aria-label="Puerta activa" /></div></>}
     </div><SheetFooter><Button variant="outline" onClick={close}>Cancelar</Button><Button disabled={!canSave} onClick={save}>Guardar</Button></SheetFooter></SheetContent></Sheet>
   </div>;
 }
