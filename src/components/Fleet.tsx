@@ -8,15 +8,17 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { mantenimientos as seedMaintenance, seatTypeTotals, tiposAsiento as seedSeatTypes, type MantEstado, type MantTipo, type Mantenimiento, type TipoAsiento } from "../data3";
+import { mantenimientos as seedMaintenance, seatTypeTotals, type MantEstado, type MantTipo, type Mantenimiento } from "../data3";
 import { usuarios } from "../data2";
 import { createAirline, getAirlines, updateAirline, type Airline, type CreateAirlineDTO } from "../services/airlineService";
 import { createPlane, getPlanes, updatePlane, type CreatePlaneDTO, type Plane } from "../services/planeService";
+import { createSeatType, getSeatTypes, updateSeatType, type CreateSeatTypeDTO, type SeatType } from "../services/seatTypeService";
 
 type Tab = "aeronaves" | "aerolineas" | "mantenimiento" | "tipos";
 type Option = { value: number; label: string; sub?: string; meta?: string };
 type AirlineForm = Partial<CreateAirlineDTO> & { activo?: boolean; id?: number };
 type PlaneForm = Partial<CreatePlaneDTO> & { activo?: boolean; id?: number };
+type SeatTypeForm = Partial<CreateSeatTypeDTO> & { id?: number };
 
 const tabLabels: Record<Tab, string> = { aeronaves: "aeronave", aerolineas: "aerolínea", mantenimiento: "mantenimiento", tipos: "tipo de asiento" };
 const tableCell = "p-4 align-middle";
@@ -45,25 +47,28 @@ export default function Fleet() {
   const [isLoadingPlanes, setIsLoadingPlanes] = useState(true);
   const [isLoadingAirlines, setIsLoadingAirlines] = useState(true);
   const [maintenance, setMaintenance] = useState(seedMaintenance);
-  const [seatTypes, setSeatTypes] = useState(seedSeatTypes);
+  const [seatTypes, setSeatTypes] = useState<SeatType[]>([]);
+  const [isLoadingSeatTypes, setIsLoadingSeatTypes] = useState(true);
   const [panel, setPanel] = useState<Tab | null>(null);
   const [planeForm, setPlaneForm] = useState<PlaneForm>({});
   const [airlineForm, setAirlineForm] = useState<AirlineForm>({});
   const [maintenanceForm, setMaintenanceForm] = useState<Partial<Mantenimiento>>({});
-  const [seatTypeForm, setSeatTypeForm] = useState<Partial<TipoAsiento>>({});
+  const [seatTypeForm, setSeatTypeForm] = useState<SeatTypeForm>({});
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
     const loadFleet = async () => {
       try {
-        const [loadedPlanes, loadedAirlines] = await Promise.all([getPlanes(), getAirlines()]);
+        const [loadedPlanes, loadedAirlines, loadedSeatTypes] = await Promise.all([getPlanes(), getAirlines(), getSeatTypes()]);
         setPlanes(loadedPlanes);
         setAirlines(loadedAirlines);
+        setSeatTypes(loadedSeatTypes);
       } catch {
         setNotice("No se pudo cargar la flota");
       } finally {
         setIsLoadingPlanes(false);
         setIsLoadingAirlines(false);
+        setIsLoadingSeatTypes(false);
       }
     };
     void loadFleet();
@@ -122,7 +127,16 @@ export default function Fleet() {
       }
     }
     if (panel === "mantenimiento") upsert(maintenance, setMaintenance, maintenanceForm);
-    if (panel === "tipos") upsert(seatTypes, setSeatTypes, { descripcion: "", ...seatTypeForm });
+    if (panel === "tipos") {
+      try {
+        const payload = { nombre: seatTypeForm.nombre!, descripcion: seatTypeForm.descripcion };
+        const result = seatTypeForm.id && seatTypeForm.id > 0 ? await updateSeatType(seatTypeForm.id, payload) : await createSeatType(payload);
+        setSeatTypes((current) => seatTypeForm.id && seatTypeForm.id > 0 ? current.map((item) => item.id === result.id ? result : item) : [...current, result]);
+      } catch {
+        setNotice("No se pudo guardar el tipo de asiento");
+        return;
+      }
+    }
     setNotice("Cambios guardados");
     setPanel(null);
   };
@@ -138,7 +152,7 @@ export default function Fleet() {
       {tab === "aeronaves" && <div className="overflow-x-auto"><Table className="min-w-[850px]"><TableHeader><TableRow>{["Matrícula", "Aeronave", "Aerolínea", "Capacidad", "Estado operativo", "Activo", ""].map((head) => <TableHead key={head}>{head}</TableHead>)}</TableRow></TableHeader><TableBody>{isLoadingPlanes ? <TableRow><TableCell colSpan={7} className="p-8 text-center text-muted-foreground">Cargando aeronaves…</TableCell></TableRow> : planes.map((plane) => <TableRow key={plane.id}><TableCell className={`${tableCell} font-mono font-semibold`}>{plane.matricula}</TableCell><TableCell className={tableCell}>{plane.nombre ?? "—"}</TableCell><TableCell className={`${tableCell} text-muted-foreground`}>{airlineName(plane.aerolineaId)}</TableCell><TableCell className={`${tableCell} font-mono`}>{plane.capacidad}</TableCell><TableCell className={tableCell}><StatusBadge value={plane.activo ? planeStatus(plane) : "Inactivo"} /></TableCell><TableCell className={tableCell}><Switch checked={plane.activo} onCheckedChange={async (active) => { try { const updated = await updatePlane(plane.id, { aerolineaId: plane.aerolineaId, matricula: plane.matricula, nombre: plane.nombre, capacidad: plane.capacidad, activo: active }); setPlanes((current) => current.map((item) => item.id === updated.id ? updated : item)); } catch { setNotice("No se pudo actualizar el estado de la aeronave"); } }} aria-label={`Activo ${plane.matricula}`} /></TableCell><TableCell className={`${tableCell} whitespace-nowrap text-right`}><Button variant="outline" size="icon" className="mr-1" aria-label="Ver mapa de asientos"><Armchair className="size-3.5" /></Button><Button variant="outline" size="icon" aria-label={`Editar ${plane.matricula}`} onClick={() => { setPlaneForm({ ...plane }); setPanel("aeronaves"); }}><Pencil className="size-3.5" /></Button></TableCell></TableRow>)}</TableBody></Table></div>}
       {tab === "aerolineas" && <div className="overflow-x-auto"><Table className="min-w-[760px]"><TableHeader><TableRow>{["Aerolínea", "IATA", "ICAO", "País", "Aeronaves", "Activa", ""].map((head) => <TableHead key={head}>{head}</TableHead>)}</TableRow></TableHeader><TableBody>{isLoadingAirlines ? <TableRow><TableCell colSpan={7} className="p-8 text-center text-muted-foreground">Cargando aerolíneas…</TableCell></TableRow> : airlines.map((airline) => <TableRow key={airline.id}><TableCell className={`${tableCell} font-medium`}>{airline.nombre}</TableCell><TableCell className={`${tableCell} font-mono`}>{airline.codigoIata}</TableCell><TableCell className={`${tableCell} font-mono`}>{airline.codigoIcao}</TableCell><TableCell className={`${tableCell} text-muted-foreground`}>{airline.pais}</TableCell><TableCell className={`${tableCell} font-mono`}>{planes.filter((plane) => plane.aerolineaId === airline.id).length}</TableCell><TableCell className={tableCell}><Switch checked={airline.activo} onCheckedChange={async (active) => { try { const updated = await updateAirline(airline.id, { ...airline, activo: active }); setAirlines((current) => current.map((item) => item.id === updated.id ? updated : item)); } catch { setNotice("No se pudo actualizar el estado de la aerolínea"); } }} aria-label={`Activa ${airline.nombre}`} /></TableCell><TableCell className={`${tableCell} text-right`}><Button variant="outline" size="icon" aria-label={`Editar ${airline.nombre}`} onClick={() => { setAirlineForm(airline); setPanel("aerolineas"); }}><Pencil className="size-3.5" /></Button></TableCell></TableRow>)}</TableBody></Table></div>}
       {tab === "mantenimiento" && <><div className="border-b border-border bg-accent/5 px-4 py-2.5 text-xs text-muted-foreground">Tabla propuesta <span className="font-mono text-foreground">Mantenimiento</span>. Mientras haya una orden EN_CURSO, la aeronave no puede asignarse a vuelos nuevos.</div><div className="overflow-x-auto"><Table className="min-w-[980px]"><TableHeader><TableRow>{["Aeronave", "Tipo", "Trabajo", "Inicio", "Fin estimado", "Estado", "Responsable", ""].map((head) => <TableHead key={head}>{head}</TableHead>)}</TableRow></TableHeader><TableBody>{maintenance.map((item) => <TableRow key={item.id}><TableCell className={`${tableCell} font-mono font-semibold`}>{planes.find((plane) => plane.id === item.avion)?.matricula ?? "—"}</TableCell><TableCell className={tableCell}><StatusBadge value={item.tipo} /></TableCell><TableCell className={tableCell}>{item.descripcion}</TableCell><TableCell className={`${tableCell} font-mono`}>{item.inicio}</TableCell><TableCell className={`${tableCell} font-mono`}>{item.fin}</TableCell><TableCell className={tableCell}><StatusBadge value={item.estado} /></TableCell><TableCell className={`${tableCell} text-muted-foreground`}>{usuarios.find((user) => user.id === item.responsable)?.nombre}</TableCell><TableCell className={`${tableCell} whitespace-nowrap text-right`}>{item.estado === "EN_CURSO" && <Button className="mr-1 h-8" onClick={() => { setMaintenance((current) => current.map((entry) => entry.id === item.id ? { ...entry, estado: "COMPLETADO" } : entry)); setNotice("Mantenimiento completado · aeronave operativa"); }}>Completar</Button>}<Button variant="outline" size="icon" aria-label="Editar mantenimiento" onClick={() => { setMaintenanceForm(item); setPanel("mantenimiento"); }}><Pencil className="size-3.5" /></Button></TableCell></TableRow>)}</TableBody></Table></div></>}
-      {tab === "tipos" && <div className="overflow-x-auto"><Table className="min-w-[620px]"><TableHeader><TableRow>{["Tipo de asiento", "Descripción", "Asientos en flota", ""].map((head) => <TableHead key={head}>{head}</TableHead>)}</TableRow></TableHeader><TableBody>{seatTypes.map((type, index) => <TableRow key={type.id}><TableCell className={`${tableCell} font-medium`}>{type.nombre}</TableCell><TableCell className={`${tableCell} text-muted-foreground`}>{type.descripcion}</TableCell><TableCell className={`${tableCell} font-mono`}>{(seatCounts[index] ?? 0).toLocaleString("en-US")}</TableCell><TableCell className={`${tableCell} text-right`}><Button variant="outline" size="icon" aria-label={`Editar ${type.nombre}`} onClick={() => { setSeatTypeForm(type); setPanel("tipos"); }}><Pencil className="size-3.5" /></Button></TableCell></TableRow>)}</TableBody></Table></div>}
+      {tab === "tipos" && <div className="overflow-x-auto"><Table className="min-w-[620px]"><TableHeader><TableRow>{["Tipo de asiento", "Descripción", "Asientos en flota", ""].map((head) => <TableHead key={head}>{head}</TableHead>)}</TableRow></TableHeader><TableBody>{isLoadingSeatTypes ? <TableRow><TableCell colSpan={4} className="p-8 text-center text-muted-foreground">Cargando tipos de asiento…</TableCell></TableRow> : seatTypes.map((type, index) => <TableRow key={type.id}><TableCell className={`${tableCell} font-medium`}>{type.nombre}</TableCell><TableCell className={`${tableCell} text-muted-foreground`}>{type.descripcion || "—"}</TableCell><TableCell className={`${tableCell} font-mono`}>{(seatCounts[index] ?? 0).toLocaleString("en-US")}</TableCell><TableCell className={`${tableCell} text-right`}><Button variant="outline" size="icon" aria-label={`Editar ${type.nombre}`} onClick={() => { setSeatTypeForm({ id: type.id, nombre: type.nombre, descripcion: type.descripcion }); setPanel("tipos"); }}><Pencil className="size-3.5" /></Button></TableCell></TableRow>)}</TableBody></Table></div>}
     </div>
     <Sheet open={!!panel} onOpenChange={(open) => !open && setPanel(null)}><SheetContent className="w-full overflow-y-auto sm:max-w-lg"><SheetHeader><SheetTitle>{panel && `${panel === "aeronaves" ? isNew(planeForm) ? "Nueva" : "Editar" : panel === "aerolineas" ? isNew(airlineForm) ? "Nueva" : "Editar" : panel === "mantenimiento" ? isNew(maintenanceForm) ? "Nuevo" : "Editar" : isNew(seatTypeForm) ? "Nuevo" : "Editar"} ${tabLabels[panel]}`}</SheetTitle><SheetDescription>Gestiona los datos del catálogo seleccionado.</SheetDescription></SheetHeader><div className="grid gap-4 py-6">
       {panel === "aeronaves" && <><Field label="Aerolínea"><SelectField options={airlineOptions} value={planeForm.aerolineaId ?? null} onChange={(value) => setPlaneForm({ ...planeForm, aerolineaId: value ?? undefined })} placeholder="Seleccionar aerolínea…" /></Field><Field label="Matrícula"><Input value={planeForm.matricula ?? ""} onChange={(event) => setPlaneForm({ ...planeForm, matricula: event.target.value.toUpperCase() })} placeholder="N-AX600" className="font-mono" /></Field><Field label="Nombre / modelo"><Input value={planeForm.nombre ?? ""} onChange={(event) => setPlaneForm({ ...planeForm, nombre: event.target.value })} placeholder="Airbus A320neo" /></Field><Field label="Capacidad (asientos)"><Input type="number" min={1} value={planeForm.capacidad ?? ""} onChange={(event) => setPlaneForm({ ...planeForm, capacidad: Number(event.target.value) })} className="font-mono" /></Field><div className="flex items-center justify-between"><div><div className="text-sm font-medium">Aeronave activa</div><div className="text-xs text-muted-foreground">Las inactivas no aparecen al programar vuelos.</div></div><Switch checked={!!planeForm.activo} onCheckedChange={(active) => setPlaneForm({ ...planeForm, activo: active })} aria-label="Aeronave activa" /></div></>}
