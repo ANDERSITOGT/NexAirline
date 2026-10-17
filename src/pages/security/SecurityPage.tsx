@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Plus, Terminal } from "lucide-react";
+import { AppBreadcrumb } from "@/components/navigation/AppBreadcrumb";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -79,6 +80,9 @@ export default function Security() {
 
   return (
     <div>
+      <AppBreadcrumb
+        items={[{ label: "Seguridad", href: "/seguridad" }, { label: "Roles y errores" }]}
+      />
       <div className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
           Seguridad y sistema

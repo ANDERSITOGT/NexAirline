@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Armchair, Pencil, Plus } from "lucide-react";
+import { AppBreadcrumb } from "@/components/navigation/AppBreadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -340,6 +341,9 @@ export default function Fleet() {
 
   return (
     <div>
+      <AppBreadcrumb
+        items={[{ label: "Flota", href: "/flota" }, { label: "Aviones y aerolíneas" }]}
+      />
       <PageHeader
         title="Flota"
         subtitle="Aeronaves, aerolíneas operadoras, mantenimiento y catálogo de asientos."

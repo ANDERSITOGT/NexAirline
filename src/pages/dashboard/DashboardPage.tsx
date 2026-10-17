@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { AppBreadcrumb } from "@/components/navigation/AppBreadcrumb";
 import { ArrowUpRight, PlaneTakeoff, Ticket, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,9 @@ export default function Dashboard() {
 
   return (
     <div>
+      <AppBreadcrumb
+        items={[{ label: "Operaciones", href: "/operaciones" }, { label: "Dashboard" }]}
+      />
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Jueves 15 oct 2026 · 13:42 GMT-6</p>

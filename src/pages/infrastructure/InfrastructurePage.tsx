@@ -24,6 +24,7 @@ import type { PaginationState, SortingState } from "@tanstack/table-core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { AppBreadcrumb } from "@/components/navigation/AppBreadcrumb";
 import { Input } from "@/components/ui/input";
 import {
   Sheet,
@@ -600,6 +601,12 @@ export default function Infrastructure() {
 
   return (
     <div>
+      <AppBreadcrumb
+        items={[
+          { label: "Infraestructura", href: "/infraestructura" },
+          { label: "Catálogos base" },
+        ]}
+      />
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight md:text-3xl">

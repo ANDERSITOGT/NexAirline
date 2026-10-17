@@ -27,6 +27,7 @@ test-results/
 .env.*
 !.env.example
 !.env.*.example
+*.local
 
 # Logs and debug output
 logs/

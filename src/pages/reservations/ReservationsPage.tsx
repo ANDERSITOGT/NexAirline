@@ -1,5 +1,6 @@
 import { Fragment, useState } from "react";
 import { ChevronRight, Search } from "lucide-react";
+import { AppBreadcrumb } from "@/components/navigation/AppBreadcrumb";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -195,6 +196,9 @@ export default function Reservations() {
 
   return (
     <div>
+      <AppBreadcrumb
+        items={[{ label: "Ventas", href: "/ventas" }, { label: "Reservas" }]}
+      />
       <div className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
           Panel de reservas

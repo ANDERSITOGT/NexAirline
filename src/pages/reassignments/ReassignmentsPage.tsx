@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { AlertTriangle, ArrowRight, Plus } from "lucide-react";
+import { AppBreadcrumb } from "@/components/navigation/AppBreadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -173,6 +174,9 @@ export default function Reassignments() {
 
   return (
     <div>
+      <AppBreadcrumb
+        items={[{ label: "Operaciones", href: "/operaciones" }, { label: "Reasignaciones" }]}
+      />
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight md:text-3xl">

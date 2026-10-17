@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Lock, LockOpen, Pencil } from "lucide-react";
+import { AppBreadcrumb } from "@/components/navigation/AppBreadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import CabinWizard from "@/components/CabinWizard";
@@ -246,6 +247,9 @@ export default function SeatMap() {
   return (
     <TooltipProvider>
       <div>
+        <AppBreadcrumb
+          items={[{ label: "Flota", href: "/flota" }, { label: "Mapa de asientos" }]}
+        />
         <div className="mb-6">
           <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
             Mapa de asientos

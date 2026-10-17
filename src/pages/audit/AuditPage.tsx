@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArrowRight, Download, Search } from "lucide-react";
+import { AppBreadcrumb } from "@/components/navigation/AppBreadcrumb";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -97,6 +98,9 @@ export default function Audit() {
 
   return (
     <div>
+      <AppBreadcrumb
+        items={[{ label: "Seguridad", href: "/seguridad" }, { label: "Bitácora de asientos" }]}
+      />
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight md:text-3xl">

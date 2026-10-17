@@ -8,12 +8,17 @@ import NewFlightPage from "@/pages/flights/NewFlightPage";
 import FlightPricingMap from "@/pages/vuelos/FlightPricingMap";
 import ReassignmentsPage from "@/pages/reassignments/ReassignmentsPage";
 import FleetPage from "@/pages/fleet/FleetPage";
+import FleetHubPage from "@/pages/fleet/FleetHubPage";
 import SeatMapPage from "@/pages/seats/SeatMapPage";
 import InfrastructurePage from "@/pages/infrastructure/InfrastructurePage";
+import InfrastructureHubPage from "@/pages/infrastructure/InfrastructureHubPage";
 import ReservationsPage from "@/pages/reservations/ReservationsPage";
 import PaymentsPage from "@/pages/payments/PaymentsPage";
+import SalesHubPage from "@/pages/ventas/SalesHubPage";
 import SecurityPage from "@/pages/security/SecurityPage";
 import AuditPage from "@/pages/audit/AuditPage";
+import OperationsHubPage from "@/pages/operaciones/OperationsHubPage";
+import SecurityHubPage from "@/pages/seguridad/SecurityHubPage";
 
 export default function AppRouter() {
   return (
@@ -23,20 +28,33 @@ export default function AppRouter() {
 
         <Route element={<ProtectedRoute />}>
           <Route element={<Shell />}>
-            <Route index element={<Navigate replace to="/dashboard" />} />
-            <Route path="home" element={<Navigate replace to="/dashboard" />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="vuelos" element={<FlightsPage />} />
+            <Route index element={<Navigate replace to="/operaciones/dashboard" />} />
+            <Route path="home" element={<Navigate replace to="/operaciones/dashboard" />} />
+            <Route path="operaciones" element={<OperationsHubPage />} />
+            <Route path="operaciones/dashboard" element={<DashboardPage />} />
+            <Route path="operaciones/vuelos" element={<FlightsPage />} />
+            <Route path="operaciones/reasignaciones" element={<ReassignmentsPage />} />
+            <Route path="dashboard" element={<Navigate replace to="/operaciones/dashboard" />} />
+            <Route path="vuelos" element={<Navigate replace to="/operaciones/vuelos" />} />
             <Route path="vuelos/nuevo" element={<NewFlightPage />} />
             <Route path="vuelos/:vueloId/asientos" element={<FlightPricingMap />} />
-            <Route path="reasignaciones" element={<ReassignmentsPage />} />
-            <Route path="flota" element={<FleetPage />} />
-            <Route path="asientos" element={<SeatMapPage />} />
-            <Route path="infraestructura" element={<InfrastructurePage />} />
-            <Route path="reservas" element={<ReservationsPage />} />
-            <Route path="pagos" element={<PaymentsPage />} />
-            <Route path="seguridad" element={<SecurityPage />} />
-            <Route path="bitacora" element={<AuditPage />} />
+            <Route path="reasignaciones" element={<Navigate replace to="/operaciones/reasignaciones" />} />
+            <Route path="flota" element={<FleetHubPage />} />
+            <Route path="flota/aviones" element={<FleetPage />} />
+            <Route path="flota/mapa-asientos" element={<SeatMapPage />} />
+            <Route path="asientos" element={<Navigate replace to="/flota/mapa-asientos" />} />
+            <Route path="infraestructura" element={<InfrastructureHubPage />} />
+            <Route path="infraestructura/catalogos" element={<InfrastructurePage />} />
+            <Route path="ventas" element={<SalesHubPage />} />
+            <Route path="ventas/reservas" element={<ReservationsPage />} />
+            <Route path="ventas/pagos" element={<PaymentsPage />} />
+            <Route path="reservas" element={<Navigate replace to="/ventas/reservas" />} />
+            <Route path="pagos" element={<Navigate replace to="/ventas/pagos" />} />
+            <Route path="seguridad" element={<SecurityHubPage />} />
+            <Route path="seguridad/roles" element={<SecurityPage />} />
+            <Route path="seguridad/bitacora" element={<AuditPage />} />
+            <Route path="roles" element={<Navigate replace to="/seguridad/roles" />} />
+            <Route path="bitacora" element={<Navigate replace to="/seguridad/bitacora" />} />
           </Route>
         </Route>
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Pencil, Plus, Search } from "lucide-react";
+import { AppBreadcrumb } from "@/components/navigation/AppBreadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -166,6 +167,9 @@ export default function Flights() {
 
   return (
     <div>
+      <AppBreadcrumb
+        items={[{ label: "Operaciones", href: "/operaciones" }, { label: "Vuelos" }]}
+      />
       <div className="mb-6 flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight md:text-3xl">

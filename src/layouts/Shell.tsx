@@ -2,36 +2,39 @@ import { useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   Plane, LayoutDashboard, PlaneTakeoff, Ticket, ChevronDown, ChevronRight, Bell, Search,
-  Building2, Armchair, Shuffle, CreditCard, ShieldCheck, ScrollText, MoreHorizontal, Home,
+  Building2, Armchair, Shuffle, CreditCard, ShieldCheck, ScrollText, MoreHorizontal, Home, Menu,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { cn } from "@/lib/utils";
 
 export type Page = "dashboard" | "vuelos" | "nuevo" | string;
 
 type Icon = typeof Plane;
-interface NavItem { id: Page; label: string; icon: Icon }
+interface NavItem { id: Page; label: string; icon: Icon; href?: string }
 interface NavGroup { name: string; items: NavItem[] }
 
 const nav: NavGroup[] = [
   { name: "Operaciones", items: [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "vuelos", label: "Vuelos", icon: PlaneTakeoff },
-    { id: "reasignaciones", label: "Reasignaciones", icon: Shuffle },
+    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/operaciones/dashboard" },
+    { id: "vuelos", label: "Vuelos", icon: PlaneTakeoff, href: "/operaciones/vuelos" },
+    { id: "reasignaciones", label: "Reasignaciones", icon: Shuffle, href: "/operaciones/reasignaciones" },
   ] },
   { name: "Flota", items: [
-    { id: "flota", label: "Aviones y aerolíneas", icon: Plane },
-    { id: "asientos", label: "Mapa de asientos", icon: Armchair },
+    { id: "flota", label: "Aviones y aerolíneas", icon: Plane, href: "/flota/aviones" },
+    { id: "asientos", label: "Mapa de asientos", icon: Armchair, href: "/flota/mapa-asientos" },
   ] },
   { name: "Infraestructura", items: [
-    { id: "infraestructura", label: "Catálogos base", icon: Building2 },
+    { id: "infraestructura", label: "Catálogos base", icon: Building2, href: "/infraestructura/catalogos" },
   ] },
   { name: "Ventas", items: [
-    { id: "reservas", label: "Reservas", icon: Ticket },
-    { id: "pagos", label: "Pagos", icon: CreditCard },
+    { id: "reservas", label: "Reservas", icon: Ticket, href: "/ventas/reservas" },
+    { id: "pagos", label: "Pagos", icon: CreditCard, href: "/ventas/pagos" },
   ] },
   { name: "Seguridad", items: [
-    { id: "seguridad", label: "Roles y errores", icon: ShieldCheck },
-    { id: "bitacora", label: "Bitácora de asientos", icon: ScrollText }
+    { id: "seguridad", label: "Roles y errores", icon: ShieldCheck, href: "/seguridad/roles" },
+    { id: "bitacora", label: "Bitácora de asientos", icon: ScrollText, href: "/seguridad/bitacora" }
    ] },
 ];
 
@@ -64,34 +67,36 @@ function Sidebar() {
   const activeId = pageFromPath(pathname) === "nuevo" ? "vuelos" : pageFromPath(pathname);
 
   return (
-    <nav className="flex-1 overflow-auto px-3 py-4">
-      {nav.map((group) => (
-        <div key={group.name} className="mb-3">
-          <button
-            onClick={() => setClosed({ ...closed, [group.name]: !closed[group.name] })}
-            className="flex w-full items-center justify-between rounded px-2 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/50 hover:text-white/80"
-          >
-            {group.name}
-            <ChevronDown className={`size-3.5 transition-transform ${closed[group.name] ? "-rotate-90" : ""}`} />
-          </button>
-          {!closed[group.name] &&
-            group.items.map((item) => {
-              const on = activeId === item.id;
-              return (
-                <NavLink
-                  key={item.id}
-                  to={`/${item.id}`}
-                  className={`relative mt-0.5 flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-sm transition-colors ${on ? "bg-white/10 font-medium text-white" : "text-white/70 hover:bg-white/5 hover:text-white"}`}
-                >
-                  {on && <span className="absolute top-2 bottom-2 -left-3 w-[3px] rounded-r bg-accent" />}
-                  <item.icon className="size-[18px]" />
-                  {item.label}
-                </NavLink>
-              );
-            })}
-        </div>
-      ))}
-    </nav>
+    <ScrollArea className="min-h-0 flex-1 px-3 py-4 [&>[data-radix-scroll-area-viewport]]:max-h-full">
+      <nav className="space-y-1">
+        {nav.map((group) => (
+          <div key={group.name} className="mb-2">
+            <button
+              onClick={() => setClosed({ ...closed, [group.name]: !closed[group.name] })}
+              className="flex w-full items-center justify-between rounded px-2 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/50 hover:text-white/80"
+            >
+              {group.name}
+              <ChevronDown className={`size-3.5 transition-transform ${closed[group.name] ? "-rotate-90" : ""}`} />
+            </button>
+            {!closed[group.name] &&
+              group.items.map((item) => {
+                const on = item.href ? pathname === item.href : activeId === item.id;
+                return (
+                  <NavLink
+                    key={item.id}
+                    to={item.href ?? `/${item.id}`}
+                    className={`relative mt-0.5 flex w-full items-center gap-3 rounded-md px-2.5 py-1.5 text-sm transition-colors ${on ? "bg-white/10 font-medium text-white" : "text-white/70 hover:bg-white/5 hover:text-white"}`}
+                  >
+                    {on && <span className="absolute top-2 bottom-2 -left-3 w-[3px] rounded-r bg-accent" />}
+                    <item.icon className="size-[18px]" />
+                    {item.label}
+                  </NavLink>
+                );
+              })}
+          </div>
+        ))}
+      </nav>
+      </ScrollArea>
   );
 }
 
@@ -103,6 +108,7 @@ const bottom: { id: Page; label: string; icon: Icon }[] = [
 ];
 
 export default function Shell() {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const { pathname } = useLocation();
   const page = pageFromPath(pathname);
   const activeId = page === "nuevo" ? "vuelos" : page;
@@ -111,13 +117,18 @@ export default function Shell() {
     : ["airlNex", groupOf(page), labelOf(page)];
 
   return (
-    <div className="flex h-full">
-      <aside className="hidden w-64 shrink-0 flex-col bg-primary text-white lg:flex">
-        <div className="flex h-16 items-center border-b border-white/10 px-5 text-white">
+    <div className="flex h-screen w-full overflow-hidden bg-background">
+      <aside
+        className={cn(
+          "flex h-full shrink-0 flex-col border-r bg-[#0b132b] text-white transition-all duration-300 ease-in-out",
+          isSidebarOpen ? "w-64" : "w-0 -translate-x-full overflow-hidden",
+        )}
+      >
+        <div className="flex h-14 shrink-0 items-center border-b border-white/10 px-4">
           <Logo />
         </div>
         <Sidebar />
-        <div className="flex items-center gap-3 border-t border-white/10 p-4">
+        <div className="flex shrink-0 items-center gap-3 border-t border-white/10 p-4">
           <div className="flex size-9 items-center justify-center rounded-full bg-white/15 text-sm font-semibold">MR</div>
           <div className="min-w-0 text-sm leading-tight">
             <div className="truncate font-medium">Marta Ramírez</div>
@@ -126,17 +137,30 @@ export default function Shell() {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-border bg-card px-4 md:px-8">
-          <div className="lg:hidden"><Logo /></div>
-          <ol className="hidden items-center gap-1.5 text-sm text-muted-foreground lg:flex">
-            {crumbs.map((crumb, index) => (
-              <li key={`${crumb}-${index}`} className="flex items-center gap-1.5">
-                {index > 0 && <ChevronRight className="size-3.5" />}
-                <span className={index === crumbs.length - 1 ? "font-medium text-foreground" : ""}>{crumb}</span>
-              </li>
-            ))}
-          </ol>
+      <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="flex h-14 shrink-0 items-center justify-between border-b bg-background/95 px-6 backdrop-blur">
+          <div className="flex items-center">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="mr-4"
+              aria-label="Alternar menú lateral"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+            <div className="lg:hidden"><Logo /></div>
+          </div>
+          {!pathname.startsWith("/infraestructura") && !pathname.startsWith("/flota") && !pathname.startsWith("/ventas") && !pathname.startsWith("/operaciones") && !pathname.startsWith("/seguridad") && (
+            <ol className="hidden items-center gap-1.5 text-sm text-muted-foreground lg:flex">
+              {crumbs.map((crumb, index) => (
+                <li key={`${crumb}-${index}`} className="flex items-center gap-1.5">
+                  {index > 0 && <ChevronRight className="size-3.5" />}
+                  <span className={index === crumbs.length - 1 ? "font-medium text-foreground" : ""}>{crumb}</span>
+                </li>
+              ))}
+            </ol>
+          )}
           <div className="flex items-center gap-2">
             <div className="hidden h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-sm text-muted-foreground md:flex">
               <Search className="size-4" />
@@ -150,8 +174,8 @@ export default function Shell() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto pb-20 lg:pb-0">
-          <div className="mx-auto w-full max-w-[1280px] px-4 py-6 md:px-8 md:py-8"><Outlet /></div>
+        <main className="flex-1 overflow-y-auto p-6 pb-20 lg:pb-6">
+          <div className="mx-auto w-full max-w-[1280px]"><Outlet /></div>
         </main>
 
         <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-border bg-card lg:hidden">
