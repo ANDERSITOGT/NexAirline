@@ -118,7 +118,7 @@ function Field({
   );
 }
 
-type SearchableOption = { value: string; label: string };
+type SearchableOption = { value: string; label: string; searchText?: string };
 
 function SearchableSelect({
   value,
@@ -141,7 +141,9 @@ function SearchableSelect({
   const selectedOption = options.find((option) => option.value === value);
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const filteredOptions = options.filter((option) =>
-    option.label.toLocaleLowerCase().includes(normalizedSearch),
+    (option.searchText ?? option.label)
+      .toLocaleLowerCase()
+      .includes(normalizedSearch),
   );
 
   useEffect(() => {
@@ -279,6 +281,13 @@ export default function Infrastructure() {
     pageIndex: 0,
     pageSize: 10,
   });
+  const [globalFilterTerminal, setGlobalFilterTerminal] = useState("");
+  const [sortingTerminal, setSortingTerminal] = useState<SortingState>([]);
+  const [paginationTerminal, setPaginationTerminal] =
+    useState<PaginationState>({
+      pageIndex: 0,
+      pageSize: 10,
+    });
   const [terminal, setTerminal] = useState<Partial<Terminal>>({ activo: true });
   const [route, setRoute] = useState<Partial<Route>>({ activa: true });
   const [gate, setGate] = useState<Partial<Gate>>({ activo: true });
@@ -599,6 +608,118 @@ export default function Infrastructure() {
     getSortedRowModel: getSortedRowModel(),
   });
 
+  const terminalColumns: LegacyColumnDef<Terminal>[] = [
+    {
+      id: "aeropuerto",
+      accessorFn: (item) => {
+        const airport = airportById(item.aeropuertoId);
+        return `${airport?.codigoIata ?? ""} ${airport?.nombre ?? ""} ${airport?.ciudad ?? ""} ${airport?.pais ?? ""}`;
+      },
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-3 h-8 px-3 text-xs font-semibold uppercase tracking-wide"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Aeropuerto
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => (
+        <span className="font-mono font-semibold">
+          {airportById(row.original.aeropuertoId)?.codigoIata ??
+            row.original.aeropuertoId}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "nombre",
+      header: "Terminal",
+      cell: ({ row }) => (
+        <span className="font-medium">{row.original.nombre}</span>
+      ),
+    },
+    {
+      accessorKey: "descripcion",
+      header: "Descripción",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">
+          {row.original.descripcion || "-"}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "activo",
+      header: "Activo",
+      cell: ({ row }) => {
+        const item = row.original;
+        return (
+          <Status
+            active={item.activo}
+            onChange={async (active) => {
+              try {
+                const updated = await updateTerminal(item.id, {
+                  aeropuertoId: item.aeropuertoId,
+                  nombre: item.nombre,
+                  descripcion: item.descripcion,
+                  activo: active,
+                });
+                setTerminals((items) =>
+                  items.map((currentItem) =>
+                    currentItem.id === updated.id ? updated : currentItem,
+                  ),
+                );
+              } catch {
+                setNotice("No se pudo actualizar el estado de la terminal");
+              }
+            }}
+            label={`Activo ${item.nombre}`}
+          />
+        );
+      },
+    },
+    {
+      id: "acciones",
+      header: "",
+      enableSorting: false,
+      cell: ({ row }) => {
+        const item = row.original;
+        return (
+          <div className="text-right">
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label={`Editar ${item.nombre}`}
+              onClick={() => {
+                setTerminal({ ...item });
+                setPanel("terminales");
+              }}
+            >
+              <Pencil className="size-3.5" />
+            </Button>
+          </div>
+        );
+      },
+    },
+  ];
+
+  const terminalTable = useLegacyTable({
+    data: terminals,
+    columns: terminalColumns,
+    state: {
+      globalFilter: globalFilterTerminal,
+      sorting: sortingTerminal,
+      pagination: paginationTerminal,
+    },
+    onGlobalFilterChange: setGlobalFilterTerminal,
+    onSortingChange: setSortingTerminal,
+    onPaginationChange: setPaginationTerminal,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
   return (
     <div>
       <AppBreadcrumb
@@ -633,31 +754,49 @@ export default function Infrastructure() {
           <TabsList className="flex h-auto w-full justify-start overflow-x-auto rounded-none border-b border-border bg-card p-0">
             <TabsTrigger
               value="aeropuertos"
-              className="rounded-none px-4 py-3.5"
+              className="group rounded-none px-4 py-3.5 font-medium text-muted-foreground shadow-none hover:bg-muted/50 hover:text-foreground data-[state=active]:bg-slate-900 data-[state=active]:font-semibold data-[state=active]:text-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900"
             >
               Aeropuertos{" "}
-              <Badge variant="secondary" className="ml-1">
+              <Badge
+                variant="secondary"
+                className="ml-1 group-data-[state=active]:bg-white/20 group-data-[state=active]:text-white dark:group-data-[state=active]:bg-slate-900/20 dark:group-data-[state=active]:text-slate-900"
+              >
                 {airports.length}
               </Badge>
             </TabsTrigger>
             <TabsTrigger
               value="terminales"
-              className="rounded-none px-4 py-3.5"
+              className="group rounded-none px-4 py-3.5 font-medium text-muted-foreground shadow-none hover:bg-muted/50 hover:text-foreground data-[state=active]:bg-slate-900 data-[state=active]:font-semibold data-[state=active]:text-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900"
             >
               Terminales{" "}
-              <Badge variant="secondary" className="ml-1">
+              <Badge
+                variant="secondary"
+                className="ml-1 group-data-[state=active]:bg-white/20 group-data-[state=active]:text-white dark:group-data-[state=active]:bg-slate-900/20 dark:group-data-[state=active]:text-slate-900"
+              >
                 {terminals.length}
               </Badge>
             </TabsTrigger>
-            <TabsTrigger value="rutas" className="rounded-none px-4 py-3.5">
+            <TabsTrigger
+              value="rutas"
+              className="group rounded-none px-4 py-3.5 font-medium text-muted-foreground shadow-none hover:bg-muted/50 hover:text-foreground data-[state=active]:bg-slate-900 data-[state=active]:font-semibold data-[state=active]:text-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900"
+            >
               Rutas{" "}
-              <Badge variant="secondary" className="ml-1">
+              <Badge
+                variant="secondary"
+                className="ml-1 group-data-[state=active]:bg-white/20 group-data-[state=active]:text-white dark:group-data-[state=active]:bg-slate-900/20 dark:group-data-[state=active]:text-slate-900"
+              >
                 {routes.length}
               </Badge>
             </TabsTrigger>
-            <TabsTrigger value="puertas" className="rounded-none px-4 py-3.5">
+            <TabsTrigger
+              value="puertas"
+              className="group rounded-none px-4 py-3.5 font-medium text-muted-foreground shadow-none hover:bg-muted/50 hover:text-foreground data-[state=active]:bg-slate-900 data-[state=active]:font-semibold data-[state=active]:text-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900"
+            >
               Puertas de embarque{" "}
-              <Badge variant="secondary" className="ml-1">
+              <Badge
+                variant="secondary"
+                className="ml-1 group-data-[state=active]:bg-white/20 group-data-[state=active]:text-white dark:group-data-[state=active]:bg-slate-900/20 dark:group-data-[state=active]:text-slate-900"
+              >
                 {gates.length}
               </Badge>
             </TabsTrigger>
@@ -760,84 +899,102 @@ export default function Infrastructure() {
               </div>
             </TabsContent>
             <TabsContent value="terminales" className="mt-0">
-              <CatalogTable
-                headings={[
-                  "Aeropuerto",
-                  "Terminal",
-                  "Descripción",
-                  "Activo",
-                  "",
-                ]}
-              >
-                {isLoadingTerminals ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={5}
-                      className="p-8 text-center text-muted-foreground"
-                    >
-                      Cargando terminales…
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  terminals.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell
-                        className={`${cellClass} font-mono font-medium`}
-                      >
-                        {airportById(item.aeropuertoId)?.codigoIata ?? "—"}
-                      </TableCell>
-                      <TableCell className={`${cellClass} font-medium`}>
-                        {item.nombre}
-                      </TableCell>
-                      <TableCell
-                        className={`${cellClass} text-muted-foreground`}
-                      >
-                        {item.descripcion || "—"}
-                      </TableCell>
-                      <TableCell className={cellClass}>
-                        <Status
-                          active={item.activo}
-                          onChange={async (active) => {
-                            try {
-                              const updated = await updateTerminal(item.id, {
-                                aeropuertoId: item.aeropuertoId,
-                                nombre: item.nombre,
-                                descripcion: item.descripcion,
-                                activo: active,
-                              });
-                              setTerminals((items) =>
-                                items.map((currentItem) =>
-                                  currentItem.id === updated.id
-                                    ? updated
-                                    : currentItem,
-                                ),
-                              );
-                            } catch {
-                              setNotice(
-                                "No se pudo actualizar el estado de la terminal",
-                              );
-                            }
-                          }}
-                          label={`Activo ${item.nombre}`}
-                        />
-                      </TableCell>
-                      <TableCell className={`${cellClass} text-right`}>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          aria-label={`Editar ${item.nombre}`}
-                          onClick={() => {
-                            setTerminal({ ...item });
-                            setPanel("terminales");
-                          }}
+              <div className="flex items-center justify-between gap-4 px-4 py-4">
+                <div className="relative max-w-sm flex-1">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por aeropuerto, terminal o descripción..."
+                    value={globalFilterTerminal ?? ""}
+                    onChange={(event) =>
+                      setGlobalFilterTerminal(event.target.value)
+                    }
+                    className="pl-8"
+                  />
+                </div>
+              </div>
+              <Table className="min-w-[700px]">
+                <TableHeader>
+                  {terminalTable.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => (
+                        <TableHead
+                          key={header.id}
+                          className="px-4 py-3 text-xs font-semibold uppercase tracking-wide"
                         >
-                          <Pencil className="size-3.5" />
-                        </Button>
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext(),
+                              )}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableHeader>
+                <TableBody>
+                  {isLoadingTerminals ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={terminalColumns.length}
+                        className="p-8 text-center text-muted-foreground"
+                      >
+                        Cargando terminales…
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </CatalogTable>
+                  ) : terminalTable.getRowModel().rows.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={terminalColumns.length}
+                        className="p-8 text-center text-muted-foreground"
+                      >
+                        No se encontraron terminales que coincidan con la búsqueda
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    terminalTable.getRowModel().rows.map((row) => (
+                      <TableRow key={row.id}>
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell key={cell.id} className={cellClass}>
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext(),
+                            )}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+              <div className="flex items-center justify-between px-4 py-4 text-sm text-muted-foreground">
+                <div>
+                  Mostrando {terminalTable.getRowModel().rows.length} de {terminalTable.getFilteredRowModel().rows.length} registros
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span>
+                    Página {terminalTable.getState().pagination.pageIndex + 1} de {Math.max(1, terminalTable.getPageCount())}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => terminalTable.previousPage()}
+                    disabled={!terminalTable.getCanPreviousPage()}
+                    aria-label="Página anterior"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => terminalTable.nextPage()}
+                    disabled={!terminalTable.getCanNextPage()}
+                    aria-label="Página siguiente"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             </TabsContent>
             <TabsContent value="rutas" className="mt-0">
               <CatalogTable
@@ -1136,23 +1293,22 @@ export default function Infrastructure() {
             {panel === "terminales" && (
               <>
                 <Field label="Aeropuerto">
-                  <select
-                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                    value={terminal.aeropuertoId ?? ""}
-                    onChange={(event) =>
-                      setTerminal({
-                        ...terminal,
-                        aeropuertoId: Number(event.target.value) || undefined,
-                      })
+                  <SearchableSelect
+                    value={terminal.aeropuertoId?.toString() ?? ""}
+                    placeholder="Selecciona un aeropuerto"
+                    searchPlaceholder="Buscar por país, ciudad, ICAO, IATA o nombre..."
+                    options={airports.map((airportItem) => ({
+                      value: airportItem.id.toString(),
+                      label: `${airportItem.codigoIata} · ${airportItem.nombre}`,
+                      searchText: `${airportItem.codigoIata} ${airportItem.codigoIcao || ""} ${airportItem.nombre} ${airportItem.ciudad || ""} ${airportItem.pais || ""}`,
+                    }))}
+                    onChange={(value) =>
+                      setTerminal((prev) => ({
+                        ...prev,
+                        aeropuertoId: Number(value) || undefined,
+                      }))
                     }
-                  >
-                    <option value="">Selecciona un aeropuerto</option>
-                    {airports.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.codigoIata} · {item.nombre}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </Field>
                 <Field label="Nombre">
                   <Input
