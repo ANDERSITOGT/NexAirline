@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { Country } from "country-state-city";
 import { AppBreadcrumb } from "@/components/navigation/AppBreadcrumb";
 import { Badge } from "@/components/ui/badge";
@@ -362,6 +363,7 @@ function StatusBadge({ value }: { value: string }) {
 }
 
 export default function Fleet() {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("aeronaves");
   const [planes, setPlanes] = useState<Plane[]>([]);
   const [airlines, setAirlines] = useState<Airline[]>([]);
@@ -632,7 +634,13 @@ export default function Fleet() {
       enableSorting: false,
       cell: ({ row }) => (
         <div className="whitespace-nowrap text-right">
-          <Button variant="outline" size="icon" className="mr-1" aria-label="Ver mapa de asientos">
+          <Button
+            variant="outline"
+            size="icon"
+            className="mr-1"
+            aria-label={`Configurar cabina de ${row.original.matricula}`}
+            onClick={() => navigate(`/flota/cabina/nueva/${row.original.id}`)}
+          >
             <Armchair className="size-3.5" />
           </Button>
           <Button

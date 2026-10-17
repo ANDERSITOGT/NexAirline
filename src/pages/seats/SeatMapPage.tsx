@@ -1,16 +1,15 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Check,
   ChevronsUpDown,
   Lock,
   LockOpen,
-  Pencil,
   Search,
 } from "lucide-react";
 import { AppBreadcrumb } from "@/components/navigation/AppBreadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import CabinWizard from "@/components/CabinWizard";
 import {
   Card,
   CardContent,
@@ -25,13 +24,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -41,10 +33,8 @@ import { getPlanes, type Plane } from "@/services/planeService";
 import { getAirlines, type Airline } from "@/services/airlineService";
 import { getSeatTypes, type SeatType } from "@/services/seatTypeService";
 import {
-  createSeat,
   getSeatsByPlane,
   updateSeat,
-  type CreateSeatDTO,
   type Seat,
 } from "@/services/seatService";
 
@@ -63,6 +53,7 @@ const TYPE_COLORS = [
 ];
 
 export default function SeatMap() {
+  const navigate = useNavigate();
   const [planes, setPlanes] = useState<Plane[]>([]);
   const [airlines, setAirlines] = useState<Airline[]>([]);
   const [seatTypes, setSeatTypes] = useState<SeatType[]>([]);
@@ -71,20 +62,7 @@ export default function SeatMap() {
   const [airplaneSearch, setAirplaneSearch] = useState("");
   const [seats, setSeats] = useState<Seat[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [editingSeat, setEditingSeat] = useState<Seat | null>(null);
-  const [editingRow, setEditingRow] = useState<number | null>(null);
-  const [rowTypeId, setRowTypeId] = useState(0);
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [form, setForm] = useState<CreateSeatDTO>({
-    avionId: 0,
-    tipoAsientoId: 0,
-    numero: "",
-    fila: 1,
-    letra: "A",
-  });
-  const [log, setLog] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -120,12 +98,6 @@ export default function SeatMap() {
       );
   }, [selectedPlaneId]);
 
-  const reloadSeats = async () => {
-    if (selectedPlaneId !== undefined) {
-      setSeats(await getSeatsByPlane(selectedPlaneId));
-      setSelectedIds([]);
-    }
-  };
   const plane = planes.find((item) => item.id === selectedPlaneId);
   const getAirplaneDetails = (currentPlane: Plane) => {
     const airline = airlines.find(
@@ -163,90 +135,6 @@ export default function SeatMap() {
     result[seat.tipoAsientoId] = (result[seat.tipoAsientoId] ?? 0) + 1;
     return result;
   }, {});
-  const openEdit = (seat: Seat) => {
-    setEditingSeat(seat);
-    setEditingRow(null);
-    setForm({
-      avionId: seat.avionId,
-      tipoAsientoId: seat.tipoAsientoId,
-      numero: seat.numero,
-      fila: seat.fila,
-      letra: seat.letra,
-    });
-    setError("");
-    setSheetOpen(true);
-  };
-  const openRowEdit = (row: number) => {
-    setEditingSeat(null);
-    setEditingRow(row);
-    setRowTypeId(
-      seats.find((seat) => seat.fila === row)?.tipoAsientoId ??
-        seatTypes[0]?.id ??
-        0,
-    );
-    setError("");
-    setSheetOpen(true);
-  };
-  const saveSeat = async () => {
-    setSaving(true);
-    try {
-      if (editingSeat)
-        await updateSeat(editingSeat.id, {
-          ...form,
-          activo: editingSeat.activo,
-        });
-      else await createSeat(form);
-      await reloadSeats();
-      setSheetOpen(false);
-      setLog(
-        [
-          `${editingSeat ? "Actualizado" : "Creado"} · ${form.numero}`,
-          ...log,
-        ].slice(0, 3),
-      );
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "No se pudo guardar el asiento.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-  const saveRow = async () => {
-    if (editingRow === null || !rowTypeId) return;
-    setSaving(true);
-    try {
-      await Promise.all(
-        seats
-          .filter((seat) => seat.fila === editingRow)
-          .map((seat) =>
-            updateSeat(seat.id, {
-              avionId: seat.avionId,
-              tipoAsientoId: rowTypeId,
-              numero: seat.numero,
-              fila: seat.fila,
-              letra: seat.letra,
-              activo: seat.activo,
-            }),
-          ),
-      );
-      await reloadSeats();
-      setSheetOpen(false);
-      setLog(
-        [`Fila ${editingRow} · ${typeNames[rowTypeId]}`, ...log].slice(0, 3),
-      );
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "No se pudo actualizar la fila.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
   const toggleActive = async (seat: Seat) => {
     const nextActive = !seat.activo;
     setSeats((current) =>
@@ -399,51 +287,13 @@ export default function SeatMap() {
                     {plane?.capacidad ?? 0} asientos
                   </span>
                   {plane && selectedPlaneId !== undefined && (
-                    <CabinWizard
-                      avionId={selectedPlaneId}
-                      capacidadAvion={plane.capacidad}
-                      tiposAsiento={seatTypes}
-                      hasExistingSeats={seats.length > 0}
-                      triggerLabel="Asignar"
-                      onSuccess={async () => {
-                        await reloadSeats();
-                        setLog(["Cabina actualizada", ...log].slice(0, 3));
-                      }}
-                    />
+                    <Button
+                      type="button"
+                      onClick={() => navigate(`/flota/cabina/nueva/${selectedPlaneId}`)}
+                    >
+                      Configurar Cabina
+                    </Button>
                   )}
-                  <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-                    <SheetContent side="right" className="w-full sm:max-w-md">
-                      <SheetHeader>
-                        <SheetTitle>
-                          {editingRow !== null
-                            ? `Editar fila ${editingRow}`
-                            : "Editar asiento"}
-                        </SheetTitle>
-                        <SheetDescription>
-                          {editingRow !== null
-                            ? "Cambia la clase de todos los asientos de esta fila."
-                            : "Modifica individualmente los datos de esta plaza."}
-                        </SheetDescription>
-                      </SheetHeader>
-                      {editingRow !== null ? (
-                        <RowForm
-                          rowTypeId={rowTypeId}
-                          setRowTypeId={setRowTypeId}
-                          seatTypes={seatTypes}
-                          saving={saving}
-                          onSave={saveRow}
-                        />
-                      ) : editingSeat ? (
-                        <EditForm
-                          form={form}
-                          setForm={setForm}
-                          seatTypes={seatTypes}
-                          saving={saving}
-                          onSave={saveSeat}
-                        />
-                      ) : null}
-                    </SheetContent>
-                  </Sheet>
                 </div>
               </div>
               <CardDescription className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
@@ -489,8 +339,6 @@ export default function SeatMap() {
                   typeNames={typeNames}
                   selectedIds={selectedIds}
                   onSelect={setSelectedIds}
-                  onEdit={openEdit}
-                  onEditRow={openRowEdit}
                   onToggle={toggleActive}
                 />
               )}
@@ -552,123 +400,11 @@ export default function SeatMap() {
                   </button>
                 </div>
               )}
-              {log.length > 0 && (
-                <div className="mt-5 border-t pt-3 text-xs text-muted-foreground">
-                  {log.map((entry) => (
-                    <p key={entry}>{entry}</p>
-                  ))}
-                </div>
-              )}
             </CardContent>
           </Card>
         </div>
       </div>
     </TooltipProvider>
-  );
-}
-
-function RowForm({
-  rowTypeId,
-  setRowTypeId,
-  seatTypes,
-  saving,
-  onSave,
-}: {
-  rowTypeId: number;
-  setRowTypeId: (id: number) => void;
-  seatTypes: SeatType[];
-  saving: boolean;
-  onSave: () => void;
-}) {
-  return (
-    <div className="mt-6 grid gap-4">
-      <label className="grid gap-1.5 text-sm font-medium">
-        Clase de la fila
-        <select
-          className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-          value={rowTypeId}
-          onChange={(event) => setRowTypeId(Number(event.target.value))}
-        >
-          {seatTypes.map((type) => (
-            <option key={type.id} value={type.id}>
-              {type.nombre}
-            </option>
-          ))}
-        </select>
-      </label>
-      <p className="text-xs text-muted-foreground">
-        Actualiza todos los asientos de la fila seleccionada.
-      </p>
-      <Button onClick={onSave} disabled={saving || !rowTypeId}>
-        {saving ? "Guardando..." : "Aplicar a la fila"}
-      </Button>
-    </div>
-  );
-}
-function EditForm({
-  form,
-  setForm,
-  seatTypes,
-  saving,
-  onSave,
-}: {
-  form: CreateSeatDTO;
-  setForm: (form: CreateSeatDTO) => void;
-  seatTypes: SeatType[];
-  saving: boolean;
-  onSave: () => void;
-}) {
-  return (
-    <div className="mt-6 grid gap-4">
-      <label className="grid gap-1.5 text-sm font-medium">
-        Número
-        <Input
-          value={form.numero}
-          onChange={(event) => setForm({ ...form, numero: event.target.value })}
-        />
-      </label>
-      <div className="grid grid-cols-2 gap-3">
-        <label className="grid gap-1.5 text-sm font-medium">
-          Fila
-          <Input
-            type="number"
-            min={1}
-            value={form.fila}
-            onChange={(event) =>
-              setForm({ ...form, fila: Number(event.target.value) })
-            }
-          />
-        </label>
-        <label className="grid gap-1.5 text-sm font-medium">
-          Letra
-          <Input
-            value={form.letra}
-            onChange={(event) =>
-              setForm({ ...form, letra: event.target.value.toUpperCase() })
-            }
-          />
-        </label>
-      </div>
-      <label className="grid gap-1.5 text-sm font-medium">
-        Tipo de asiento
-        <select
-          className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-          value={form.tipoAsientoId}
-          onChange={(event) =>
-            setForm({ ...form, tipoAsientoId: Number(event.target.value) })
-          }
-        >
-          {seatTypes.map((type) => (
-            <option key={type.id} value={type.id}>
-              {type.nombre}
-            </option>
-          ))}
-        </select>
-      </label>
-      <Button onClick={onSave} disabled={saving || !form.numero}>
-        {saving ? "Guardando..." : "Guardar cambios"}
-      </Button>
-    </div>
   );
 }
 
@@ -678,8 +414,6 @@ function CabinGrid({
   typeNames,
   selectedIds,
   onSelect,
-  onEdit,
-  onEditRow,
   onToggle,
 }: {
   rows: number[];
@@ -687,90 +421,63 @@ function CabinGrid({
   typeNames: Record<string, string>;
   selectedIds: number[];
   onSelect: (ids: number[]) => void;
-  onEdit: (seat: Seat) => void;
-  onEditRow: (row: number) => void;
   onToggle: (seat: Seat) => void;
 }) {
   return (
-    <div className="flex justify-center rounded-lg bg-background px-2 py-6">
-      <div className="w-full max-w-[560px]">
-        <div className="mx-auto h-14 w-[70%] rounded-t-full border-x-2 border-t-2 border-border bg-card text-center font-mono text-[10px] uppercase tracking-widest leading-[3.5rem] text-muted-foreground">
-          Cabina
+    <div className="overflow-x-auto rounded-2xl bg-background px-2 py-6 sm:px-5">
+      <div className="relative mx-auto min-w-[560px] max-w-[860px] overflow-hidden rounded-[4rem] border-2 border-slate-200 bg-card px-4 pb-12 pt-20 shadow-sm dark:border-border sm:px-8">
+        <div className="pointer-events-none absolute inset-x-[18%] top-0 h-24 rounded-b-[50%] border-x-2 border-b-2 border-slate-200 bg-background dark:border-border" />
+        <div className="pointer-events-none absolute inset-x-[32%] bottom-0 h-8 rounded-t-[50%] border-x-2 border-t-2 border-slate-200 bg-background dark:border-border" />
+        <div className="relative mb-5 text-center font-mono text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+          Cabina · Morro
         </div>
-        <div className="max-h-[560px] overflow-y-auto border-x-2 border-border bg-card px-3 py-3 sm:px-6">
-          <div className="mb-2 grid grid-cols-[1fr_44px_1fr] text-center font-mono text-[11px] text-muted-foreground">
-            <span>VENTANA</span>
-            <span>PASILLO</span>
-            <span>VENTANA</span>
+        <div className="relative rounded-3xl border border-border/70 bg-background/70 px-3 py-4 sm:px-5">
+          <div className="mb-3 grid grid-cols-[32px_1fr] items-center text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            <span />
+            <span>Ventana · Bloques de asientos · Ventana</span>
           </div>
           {rows.map((row, rowIndex) => {
             const rowSeats = [...(seatsByRow[row] ?? [])].sort((a, b) =>
               a.letra.localeCompare(b.letra),
             );
-            const split = Math.ceil(rowSeats.length / 2);
-            const left = rowSeats.slice(0, split);
-            const right = rowSeats.slice(split);
+            const groups = getSeatGroups(rowSeats);
             const typeName =
               typeNames[String(rowSeats[0]?.tipoAsientoId)] ?? "Sin clase";
             const previousSeats = seatsByRow[rows[rowIndex - 1]] ?? [];
             const previousType =
               typeNames[String(previousSeats[0]?.tipoAsientoId)] ?? "";
             return (
-              <div
-                key={row}
-                onDoubleClick={() => onEditRow(row)}
-                className="cursor-pointer"
-              >
+              <div key={row}>
                 {(rowIndex === 0 || previousType !== typeName) && (
-                  <div className="my-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                    <span>{typeName}</span>
+                  <div className="my-3 flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    <span className="truncate">{typeName}</span>
                     <span className="h-px flex-1 bg-border" />
                   </div>
                 )}
-                <div className="grid grid-cols-[1fr_44px_1fr] items-center gap-1 py-1">
-                  <div
-                    className="grid gap-1"
-                    style={{
-                      gridTemplateColumns: `repeat(${Math.max(left.length, 1)}, minmax(0, 1fr))`,
-                    }}
-                  >
-                    {left.map((seat) => (
-                      <SeatButton
-                        key={seat.id}
-                        seat={seat}
-                        typeName={typeNames[String(seat.tipoAsientoId)]}
-                        selectedIds={selectedIds}
-                        onSelect={onSelect}
-                        onEdit={onEdit}
-                        onToggle={onToggle}
-                      />
-                    ))}
-                  </div>
-                  <div className="flex w-8 items-center justify-center">
-                    <button
-                      aria-label={`Editar fila ${row}`}
-                      onClick={() => onEditRow(row)}
-                      className="font-mono text-[10px] text-muted-foreground hover:text-foreground"
-                    >
-                      {row}
-                    </button>
-                  </div>
-                  <div
-                    className="grid gap-1"
-                    style={{
-                      gridTemplateColumns: `repeat(${Math.max(right.length, 1)}, minmax(0, 1fr))`,
-                    }}
-                  >
-                    {right.map((seat) => (
-                      <SeatButton
-                        key={seat.id}
-                        seat={seat}
-                        typeName={typeNames[String(seat.tipoAsientoId)]}
-                        selectedIds={selectedIds}
-                        onSelect={onSelect}
-                        onEdit={onEdit}
-                        onToggle={onToggle}
-                      />
+                <div className="grid grid-cols-[32px_1fr] items-center gap-2 py-1.5">
+                  <span className="text-center font-mono text-[10px] text-muted-foreground">
+                    {row}
+                  </span>
+                  <div className="flex items-center justify-center gap-4 sm:gap-7">
+                    {groups.map((group, groupIndex) => (
+                      <div
+                        key={`${row}-${groupIndex}`}
+                        className="grid flex-1 gap-1.5"
+                        style={{
+                          gridTemplateColumns: `repeat(${Math.max(group.length, 1)}, minmax(0, 1fr))`,
+                        }}
+                      >
+                        {group.map((seat) => (
+                          <SeatButton
+                            key={seat.id}
+                            seat={seat}
+                            typeName={typeNames[String(seat.tipoAsientoId)]}
+                            selectedIds={selectedIds}
+                            onSelect={onSelect}
+                            onToggle={onToggle}
+                          />
+                        ))}
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -778,9 +485,31 @@ function CabinGrid({
             );
           })}
         </div>
+        <div className="relative mt-4 text-center font-mono text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+          Cola
+        </div>
       </div>
     </div>
   );
+}
+
+function getSeatGroups(seats: Seat[]): Seat[][] {
+  const groupSizes =
+    seats.length === 8
+      ? [2, 4, 2]
+      : seats.length === 9
+        ? [3, 3, 3]
+        : seats.length === 6
+          ? [3, 3]
+          : seats.length === 4
+            ? [2, 2]
+            : [Math.ceil(seats.length / 2), Math.floor(seats.length / 2)];
+  let offset = 0;
+  return groupSizes.map((size) => {
+    const group = seats.slice(offset, offset + size);
+    offset += size;
+    return group;
+  });
 }
 
 function SeatButton({
@@ -788,14 +517,12 @@ function SeatButton({
   typeName,
   selectedIds,
   onSelect,
-  onEdit,
   onToggle,
 }: {
   seat: Seat;
   typeName?: string;
   selectedIds: number[];
   onSelect: (ids: number[]) => void;
-  onEdit: (seat: Seat) => void;
   onToggle: (seat: Seat) => void;
 }) {
   const status: SeatEstado = seat.activo ? "DISPONIBLE" : "BLOQUEADO";
@@ -807,7 +534,6 @@ function SeatButton({
         <Button
           variant="ghost"
           size="icon"
-          onDoubleClick={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
             onSelect(
@@ -828,12 +554,6 @@ function SeatButton({
           <span className="text-xs text-muted-foreground">
             {typeName ?? "Sin tipo"}
           </span>
-          <button
-            aria-label={`Editar ${seat.numero}`}
-            onClick={() => onEdit(seat)}
-          >
-            <Pencil className="size-3.5" />
-          </button>
           <button
             aria-label={`${seat.activo ? "Bloquear" : "Activar"} ${seat.numero}`}
             onClick={() => onToggle(seat)}

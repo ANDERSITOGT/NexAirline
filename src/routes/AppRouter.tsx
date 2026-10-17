@@ -10,6 +10,7 @@ import ReassignmentsPage from "@/pages/reassignments/ReassignmentsPage";
 import FleetPage from "@/pages/fleet/FleetPage";
 import FleetHubPage from "@/pages/fleet/FleetHubPage";
 import SeatMapPage from "@/pages/seats/SeatMapPage";
+import CabinWizardPage from "@/pages/fleet/CabinWizardPage";
 import InfrastructurePage from "@/pages/infrastructure/InfrastructurePage";
 import InfrastructureHubPage from "@/pages/infrastructure/InfrastructureHubPage";
 import ReservationsPage from "@/pages/reservations/ReservationsPage";
@@ -42,6 +43,7 @@ export default function AppRouter() {
             <Route path="flota" element={<FleetHubPage />} />
             <Route path="flota/aviones" element={<FleetPage />} />
             <Route path="flota/mapa-asientos" element={<SeatMapPage />} />
+            <Route path="flota/cabina/nueva/:avionId" element={<CabinWizardPage />} />
             <Route path="asientos" element={<Navigate replace to="/flota/mapa-asientos" />} />
             <Route path="infraestructura" element={<InfrastructureHubPage />} />
             <Route path="infraestructura/catalogos" element={<InfrastructurePage />} />
