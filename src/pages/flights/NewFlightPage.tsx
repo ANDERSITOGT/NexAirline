@@ -7,17 +7,11 @@ import {
   Check,
   Clock,
   PlaneTakeoff,
+  Search,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Command,
-  CommandEmpty,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
@@ -59,6 +53,118 @@ function formatDate(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }
 
+function AirportPicker({
+  airports,
+  value,
+  placeholder,
+  onChange,
+}: {
+  airports: Airport[];
+  value: number | null;
+  placeholder: string;
+  onChange: (value: number | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const selectedAirport = airports.find((airport) => airport.id === value);
+  const filteredAirports = airports.filter((airport) =>
+    `${airport.codigoIata} ${airport.codigoIcao} ${airport.nombre} ${airport.ciudad} ${airport.pais}`
+      .toLocaleLowerCase()
+      .includes(search.toLocaleLowerCase()),
+  );
+  const close = () => {
+    setOpen(false);
+    setSearch("");
+  };
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) setSearch("");
+      }}
+      modal={false}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-10 w-full justify-between text-left font-normal"
+        >
+          {selectedAirport ? (
+            <span className="truncate">
+              <span className="font-semibold">{selectedAirport.codigoIata}</span>
+              <span className="ml-2 text-muted-foreground">
+                {selectedAirport.ciudad} · {selectedAirport.pais}
+              </span>
+            </span>
+          ) : (
+            <span className="text-muted-foreground">{placeholder}</span>
+          )}
+          <ArrowRight className="ml-2 size-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[400px] p-0" align="start">
+        <div className="bg-popover text-popover-foreground">
+          <div className="flex items-center border-b px-3">
+            <Search className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+            <Input
+              autoFocus
+              value={search}
+              placeholder="Buscar por IATA, ciudad, país o aeropuerto..."
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") close();
+                if (event.key === "Enter" && filteredAirports[0]) {
+                  onChange(filteredAirports[0].id);
+                  close();
+                }
+              }}
+              className="h-11 border-0 px-0 shadow-none focus-visible:ring-0"
+            />
+          </div>
+          <div role="listbox" className="max-h-60 overflow-y-auto p-1">
+            {filteredAirports.length === 0 ? (
+              <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                No se encontraron aeropuertos.
+              </p>
+            ) : (
+              filteredAirports.map((airport) => (
+                <button
+                  key={airport.id}
+                  type="button"
+                  role="option"
+                  aria-selected={airport.id === value}
+                  className="flex w-full cursor-pointer items-center rounded-sm px-2 py-2 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+                  onClick={() => {
+                    onChange(airport.id);
+                    close();
+                  }}
+                >
+                  <Check
+                    className={`mr-2 h-4 w-4 shrink-0 ${airport.id === value ? "opacity-100" : "opacity-0"}`}
+                  />
+                  <span className="min-w-0">
+                    <span className="block font-semibold">
+                      {airport.codigoIata} · {airport.nombre}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {airport.ciudad} · {airport.pais}
+                    </span>
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export default function Wizard() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
@@ -69,13 +175,16 @@ export default function Wizard() {
   const [airports, setAirports] = useState<Airport[]>([]);
   const [airlines, setAirlines] = useState<Airline[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
+  const [selectedOriginAirportId, setSelectedOriginAirportId] = useState<number | null>(null);
+  const [selectedDestinationAirportId, setSelectedDestinationAirportId] = useState<number | null>(null);
   const [selectedPlaneId, setSelectedPlaneId] = useState<number | null>(null);
   const [minimumCapacity, setMinimumCapacity] = useState(0);
   const [flightNumber, setFlightNumber] = useState("AX 812");
   const [selectedGateId, setSelectedGateId] = useState<number | null>(null);
-  const [openRouteCombo, setOpenRouteCombo] = useState(false);
   const [openPlaneCombo, setOpenPlaneCombo] = useState(false);
   const [openGateCombo, setOpenGateCombo] = useState(false);
+  const [planeSearch, setPlaneSearch] = useState("");
+  const [gateSearch, setGateSearch] = useState("");
   const initialDate = new Date();
   initialDate.setDate(initialDate.getDate() + 1);
   const [departureDate, setDepartureDate] = useState(formatDate(initialDate));
@@ -119,22 +228,49 @@ export default function Wizard() {
     void load();
   }, []);
   const selectedRoute = routes.find((item) => item.id === selectedRouteId);
+  const selectedOriginAirport = airports.find(
+    (airport) => airport.id === selectedOriginAirportId,
+  );
+  const selectedDestinationAirport = airports.find(
+    (airport) => airport.id === selectedDestinationAirportId,
+  );
   const plane = planes.find((item) => item.id === selectedPlaneId);
   const selectedGate = gates.find((item) => item.id === selectedGateId);
   const routeLabel = (item: Route) =>
     `${airports.find((airport) => airport.id === item.aeropuertoOrigenId)?.codigoIata ?? "—"} → ${airports.find((airport) => airport.id === item.aeropuertoDestinoId)?.codigoIata ?? "—"}`;
-  const routeCity = (item: Route) =>
-    `${airports.find((airport) => airport.id === item.aeropuertoOrigenId)?.ciudad ?? "—"} – ${airports.find((airport) => airport.id === item.aeropuertoDestinoId)?.ciudad ?? "—"}`;
-  const routeOptions = routes.filter((item) => item.activa);
-  const planeOptions = planes.filter(
-    (item) => item.activo && item.capacidad >= minimumCapacity,
-  );
+  const planeOptions = planes.filter((item) => {
+    if (!item.activo || item.capacidad < minimumCapacity) return false;
+    const airline = airlines.find(
+      (candidate) => candidate.id === item.aerolineaId,
+    );
+    return `${item.matricula} ${item.nombre ?? ""} ${airline?.nombre ?? ""}`
+      .toLocaleLowerCase()
+      .includes(planeSearch.toLocaleLowerCase());
+  });
   const validGates = gates.filter((gate) => {
     const terminal = terminals.find((item) => item.id === gate.sedeId);
     return (
       gate.activo && terminal?.aeropuertoId === selectedRoute?.aeropuertoOrigenId
+      && `Puerta ${gate.numero} ${terminal?.nombre ?? ""}`
+        .toLocaleLowerCase()
+        .includes(gateSearch.toLocaleLowerCase())
     );
   });
+  const updateAirportSelection = (
+    originId: number | null,
+    destinationId: number | null,
+  ) => {
+    const route = routes.find(
+      (item) =>
+        item.activa &&
+        item.aeropuertoOrigenId === originId &&
+        item.aeropuertoDestinoId === destinationId,
+    );
+    setSelectedOriginAirportId(originId);
+    setSelectedDestinationAirportId(destinationId);
+    setSelectedRouteId(route?.id ?? null);
+    setSelectedGateId(null);
+  };
   const timesValid =
     `${arrivalDate}T${arrivalTime}` > `${departureDate}T${departureTime}`;
   const canContinue =
@@ -234,83 +370,33 @@ export default function Wizard() {
                         Solo se muestran rutas activas.
                       </p>
                     </div>
-                    <Field label="Ruta (origen → destino)">
-                      <Popover
-                        open={openRouteCombo}
-                        onOpenChange={setOpenRouteCombo}
-                      >
-                        <PopoverTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-10 w-full justify-between font-normal"
-                          >
-                            {selectedRoute ? (
-                              <span className="truncate text-left">
-                                <span className="font-semibold">
-                                  {routeLabel(selectedRoute)}
-                                </span>
-                                <span className="ml-2 text-muted-foreground">
-                                  {routeCity(selectedRoute)} · {selectedRoute.duracionEstimada} min
-                                </span>
-                              </span>
-                            ) : (
-                              "Seleccionar ruta..."
-                            )}
-                            <ArrowRight className="ml-2 size-4 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[400px] p-0" align="start">
-                          <Command>
-                            <CommandInput placeholder="Buscar por IATA, ciudad, país o aeropuerto..." />
-                            <CommandList>
-                              <CommandEmpty>No hay rutas disponibles.</CommandEmpty>
-                              {routeOptions.map((item) => {
-                                const origin = airports.find(
-                                  (airport) => airport.id === item.aeropuertoOrigenId,
-                                );
-                                const destination = airports.find(
-                                  (airport) => airport.id === item.aeropuertoDestinoId,
-                                );
-                                const searchValue = [
-                                  origin?.codigoIata,
-                                  origin?.ciudad,
-                                  origin?.pais,
-                                  origin?.nombre,
-                                  destination?.codigoIata,
-                                  destination?.ciudad,
-                                  destination?.pais,
-                                  destination?.nombre,
-                                ]
-                                  .filter(Boolean)
-                                  .join(" ");
-                                return (
-                                  <CommandItem
-                                    key={item.id}
-                                    value={searchValue}
-                                    onSelect={() => {
-                                      setSelectedRouteId(item.id);
-                                      setSelectedGateId(null);
-                                      setOpenRouteCombo(false);
-                                    }}
-                                    className="items-start"
-                                  >
-                                    <div>
-                                      <div className="font-semibold">
-                                        {origin?.codigoIata ?? "—"} → {destination?.codigoIata ?? "—"}
-                                      </div>
-                                      <div className="text-xs text-muted-foreground">
-                                        {origin?.ciudad ?? "—"} a {destination?.ciudad ?? "—"} · {item.duracionEstimada} min
-                                      </div>
-                                    </div>
-                                  </CommandItem>
-                                );
-                              })}
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                    </Field>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Field label="Punto de salida">
+                        <AirportPicker
+                          airports={airports.filter((airport) => airport.activo !== false)}
+                          value={selectedOriginAirportId}
+                          placeholder="Seleccionar aeropuerto de salida..."
+                          onChange={(value) =>
+                            updateAirportSelection(value, selectedDestinationAirportId)
+                          }
+                        />
+                      </Field>
+                      <Field label="Punto de llegada o aterrizaje">
+                        <AirportPicker
+                          airports={airports.filter((airport) => airport.activo !== false)}
+                          value={selectedDestinationAirportId}
+                          placeholder="Seleccionar aeropuerto de llegada..."
+                          onChange={(value) =>
+                            updateAirportSelection(selectedOriginAirportId, value)
+                          }
+                        />
+                      </Field>
+                    </div>
+                    {selectedOriginAirport && selectedDestinationAirport && !selectedRoute && (
+                      <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                        No existe una ruta activa entre estos aeropuertos.
+                      </p>
+                    )}
                     {selectedRoute && (
                       <div className="grid grid-cols-3 gap-3 rounded-lg bg-background p-4">
                         {[
@@ -371,6 +457,7 @@ export default function Wizard() {
                       <Popover
                         open={openPlaneCombo}
                         onOpenChange={setOpenPlaneCombo}
+                        modal={false}
                       >
                         <PopoverTrigger asChild>
                           <Button
@@ -389,40 +476,61 @@ export default function Wizard() {
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-[400px] p-0" align="start">
-                          <Command>
-                            <CommandInput placeholder="Buscar matrícula, modelo o aerolínea..." />
-                            <CommandList>
-                              <CommandEmpty>No hay aeronaves disponibles.</CommandEmpty>
-                              {planeOptions.map((item) => {
-                                const airline = airlines.find(
-                                  (candidate) => candidate.id === item.aerolineaId,
-                                );
-                                return (
-                                  <CommandItem
-                                    key={item.id}
-                                    value={`${item.matricula} ${item.nombre ?? ""} ${airline?.nombre ?? ""}`}
-                                    onSelect={() => {
-                                      setSelectedPlaneId(item.id);
-                                      setOpenPlaneCombo(false);
-                                    }}
-                                    className="items-start"
-                                  >
-                                    <div className="flex w-full items-start justify-between gap-3">
-                                      <div>
-                                        <div className="font-semibold">
-                                          {item.matricula} · {item.nombre ?? "Aeronave"}
-                                        </div>
-                                        <div className="text-xs text-muted-foreground">
-                                          {airline?.nombre ?? "Aerolínea no disponible"}
-                                        </div>
-                                      </div>
-                                      <Badge variant="secondary">{item.capacidad} pax</Badge>
-                                    </div>
-                                  </CommandItem>
-                                );
-                              })}
-                            </CommandList>
-                          </Command>
+                          <div className="bg-popover text-popover-foreground">
+                            <div className="flex items-center border-b px-3">
+                              <Search className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                              <Input
+                                autoFocus
+                                value={planeSearch}
+                                placeholder="Buscar matrícula, modelo o aerolínea..."
+                                onChange={(event) => setPlaneSearch(event.target.value)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Escape") setOpenPlaneCombo(false);
+                                  if (event.key === "Enter" && planeOptions[0]) {
+                                    setSelectedPlaneId(planeOptions[0].id);
+                                    setOpenPlaneCombo(false);
+                                  }
+                                }}
+                                className="h-11 border-0 px-0 shadow-none focus-visible:ring-0"
+                              />
+                            </div>
+                            <div role="listbox" className="max-h-60 overflow-y-auto p-1">
+                              {planeOptions.length === 0 ? (
+                                <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                                  No se encontraron aeronaves.
+                                </p>
+                              ) : (
+                                planeOptions.map((item) => {
+                                  const airline = airlines.find((candidate) => candidate.id === item.aerolineaId);
+                                  return (
+                                    <button
+                                      key={item.id}
+                                      type="button"
+                                      role="option"
+                                      className="flex w-full cursor-pointer items-start rounded-sm px-2 py-2 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+                                      onClick={() => {
+                                        setSelectedPlaneId(item.id);
+                                        setOpenPlaneCombo(false);
+                                        setPlaneSearch("");
+                                      }}
+                                    >
+                                      <span className="flex w-full items-start justify-between gap-3">
+                                        <span>
+                                          <span className="block font-semibold">
+                                            {item.matricula} · {item.nombre ?? "Aeronave"}
+                                          </span>
+                                          <span className="block text-xs text-muted-foreground">
+                                            {airline?.nombre ?? "Aerolínea no disponible"}
+                                          </span>
+                                        </span>
+                                        <Badge variant="secondary">{item.capacidad} pax</Badge>
+                                      </span>
+                                    </button>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
                         </PopoverContent>
                       </Popover>
                     </Field>
@@ -465,6 +573,7 @@ export default function Wizard() {
                         <Popover
                           open={openGateCombo}
                           onOpenChange={setOpenGateCombo}
+                          modal={false}
                         >
                           <PopoverTrigger asChild>
                             <Button
@@ -483,39 +592,56 @@ export default function Wizard() {
                             </Button>
                           </PopoverTrigger>
                           <PopoverContent className="w-[400px] p-0" align="start">
-                            <Command>
-                              <CommandInput placeholder="Buscar número o terminal..." />
-                              <CommandList>
-                                <CommandEmpty>
-                                  No hay puertas disponibles en el aeropuerto de origen.
-                                </CommandEmpty>
-                                {validGates.map((gate) => {
-                                  const terminal = terminals.find(
-                                    (item) => item.id === gate.sedeId,
-                                  );
-                                  return (
-                                    <CommandItem
-                                      key={gate.id}
-                                      value={`Puerta ${gate.numero} ${terminal?.nombre ?? ""}`}
-                                      onSelect={() => {
-                                        setSelectedGateId(gate.id);
-                                        setOpenGateCombo(false);
-                                      }}
-                                      className="items-start"
-                                    >
-                                      <div>
-                                        <div className="font-semibold">
-                                          Puerta {gate.numero}
-                                        </div>
-                                        <div className="text-xs text-muted-foreground">
-                                          {terminal?.nombre ?? "Terminal no disponible"}
-                                        </div>
-                                      </div>
-                                    </CommandItem>
-                                  );
-                                })}
-                              </CommandList>
-                            </Command>
+                            <div className="bg-popover text-popover-foreground">
+                              <div className="flex items-center border-b px-3">
+                                <Search className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                                <Input
+                                  autoFocus
+                                  value={gateSearch}
+                                  placeholder="Buscar número o terminal..."
+                                  onChange={(event) => setGateSearch(event.target.value)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Escape") setOpenGateCombo(false);
+                                    if (event.key === "Enter" && validGates[0]) {
+                                      setSelectedGateId(validGates[0].id);
+                                      setOpenGateCombo(false);
+                                    }
+                                  }}
+                                  className="h-11 border-0 px-0 shadow-none focus-visible:ring-0"
+                                />
+                              </div>
+                              <div role="listbox" className="max-h-60 overflow-y-auto p-1">
+                                {validGates.length === 0 ? (
+                                  <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                                    No hay puertas disponibles en el aeropuerto de origen.
+                                  </p>
+                                ) : (
+                                  validGates.map((gate) => {
+                                    const terminal = terminals.find((item) => item.id === gate.sedeId);
+                                    return (
+                                      <button
+                                        key={gate.id}
+                                        type="button"
+                                        role="option"
+                                        className="flex w-full cursor-pointer items-start rounded-sm px-2 py-2 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+                                        onClick={() => {
+                                          setSelectedGateId(gate.id);
+                                          setOpenGateCombo(false);
+                                          setGateSearch("");
+                                        }}
+                                      >
+                                        <span>
+                                          <span className="block font-semibold">Puerta {gate.numero}</span>
+                                          <span className="block text-xs text-muted-foreground">
+                                            {terminal?.nombre ?? "Terminal no disponible"}
+                                          </span>
+                                        </span>
+                                      </button>
+                                    );
+                                  })
+                                )}
+                              </div>
+                            </div>
                           </PopoverContent>
                         </Popover>
                       </Field>

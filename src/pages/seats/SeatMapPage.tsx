@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Check,
   ChevronsUpDown,
@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/tooltip";
 import { getPlanes, type Plane } from "@/services/planeService";
 import { getAirlines, type Airline } from "@/services/airlineService";
+import { getFlights, type Flight } from "@/services/flightService";
 import { getSeatTypes, type SeatType } from "@/services/seatTypeService";
 import {
   getSeatsByPlane,
@@ -54,8 +55,11 @@ const TYPE_COLORS = [
 
 export default function SeatMap() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedPlaneId = Number(searchParams.get("avionId"));
   const [planes, setPlanes] = useState<Plane[]>([]);
   const [airlines, setAirlines] = useState<Airline[]>([]);
+  const [flights, setFlights] = useState<Flight[]>([]);
   const [seatTypes, setSeatTypes] = useState<SeatType[]>([]);
   const [selectedPlaneId, setSelectedPlaneId] = useState<number>();
   const [openAirplaneCombobox, setOpenAirplaneCombobox] = useState(false);
@@ -66,12 +70,17 @@ export default function SeatMap() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    Promise.all([getPlanes(), getAirlines(), getSeatTypes()])
-      .then(([loadedPlanes, loadedAirlines, loadedTypes]) => {
+    Promise.all([getPlanes(), getAirlines(), getSeatTypes(), getFlights()])
+      .then(([loadedPlanes, loadedAirlines, loadedTypes, loadedFlights]) => {
         setPlanes(loadedPlanes);
         setAirlines(loadedAirlines);
         setSeatTypes(loadedTypes);
-        if (loadedPlanes[0]) setSelectedPlaneId(loadedPlanes[0].id);
+        setFlights(loadedFlights);
+        const requestedPlane = loadedPlanes.find(
+          (plane) => plane.id === requestedPlaneId,
+        );
+        if (requestedPlane) setSelectedPlaneId(requestedPlane.id);
+        else if (loadedPlanes[0]) setSelectedPlaneId(loadedPlanes[0].id);
       })
       .catch((cause) =>
         setError(
@@ -81,7 +90,7 @@ export default function SeatMap() {
         ),
       )
       .finally(() => setLoading(false));
-  }, []);
+  }, [requestedPlaneId]);
   useEffect(() => {
     if (selectedPlaneId === undefined) return;
     getSeatsByPlane(selectedPlaneId)
@@ -99,6 +108,7 @@ export default function SeatMap() {
   }, [selectedPlaneId]);
 
   const plane = planes.find((item) => item.id === selectedPlaneId);
+  const planeHasFlights = flights.some((flight) => flight.avionId === selectedPlaneId);
   const getAirplaneDetails = (currentPlane: Plane) => {
     const airline = airlines.find(
       (item) => item.id === currentPlane.aerolineaId,
@@ -289,6 +299,8 @@ export default function SeatMap() {
                   {plane && selectedPlaneId !== undefined && (
                     <Button
                       type="button"
+                      disabled={planeHasFlights}
+                      title={planeHasFlights ? "La cabina está protegida porque el avión ya tiene vuelos." : "Configurar cabina"}
                       onClick={() => navigate(`/flota/cabina/nueva/${selectedPlaneId}`)}
                     >
                       Configurar Cabina
@@ -296,6 +308,11 @@ export default function SeatMap() {
                   )}
                 </div>
               </div>
+              {planeHasFlights && (
+                <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                  Este avión ya está asociado a vuelos. La distribución de asientos está protegida para no alterar datos existentes.
+                </div>
+              )}
               <CardDescription className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
                 <span className="flex items-center gap-1.5">
                   <Badge

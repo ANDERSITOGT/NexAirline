@@ -333,14 +333,57 @@ export default function FlightPricingMap() {
                   </Button>
                 </div>
               ) : (
-                <CabinGrid
-                  rows={rows}
-                  seatsByRow={seatsByRow}
-                  typeNames={typeNames}
-                  selectedIds={selectedIds}
-                  onToggle={toggleSeat}
-                  onSelect={selectSeats}
-                />
+                <div className="space-y-4">
+                  <div className="rounded-lg border bg-card p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Seleccionar:
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => selectSeats(commercialSeats.map((seat) => seat.id))}
+                      >
+                        <Check className="size-3.5" /> Todos disponibles
+                      </Button>
+                      {seatTypes.map((type) => (
+                        <Button
+                          key={type.id}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            selectSeats(
+                              commercialSeats
+                                .filter((seat) => seat.tipoAsientoId === type.id)
+                                .map((seat) => seat.id),
+                            )
+                          }
+                        >
+                          {type.nombre} ({typeCounts[type.id] ?? 0})
+                        </Button>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedIds([])}
+                        disabled={selectedIds.length === 0}
+                      >
+                        Limpiar
+                      </Button>
+                    </div>
+                  </div>
+                  <CabinGrid
+                    rows={rows}
+                    seatsByRow={seatsByRow}
+                    typeNames={typeNames}
+                    selectedIds={selectedIds}
+                    onToggle={toggleSeat}
+                    onSelect={selectSeats}
+                  />
+                </div>
               )}
             </CardContent>
           </Card>
@@ -427,13 +470,33 @@ function CabinGrid({
   onToggle: (seat: CommercialSeat) => void;
   onSelect: (seatIds: number[]) => void;
 }) {
+  const columns = Array.from(
+    new Set(Object.values(seatsByRow).flat().map((seat) => seat.letra)),
+  ).sort((a, b) => a.localeCompare(b));
+  const allSeats = Object.values(seatsByRow).flat();
+
   return (
-    <div className="flex justify-center rounded-lg bg-background px-2 py-6">
-      <div className="w-full max-w-[560px]">
-        <div className="mx-auto h-14 w-[70%] rounded-t-full border-x-2 border-t-2 border-border bg-card text-center font-mono text-[10px] uppercase tracking-widest leading-[3.5rem] text-muted-foreground">
+    <div className="flex justify-center rounded-2xl bg-slate-100/70 px-2 py-6 sm:px-4">
+      <div className="w-full max-w-[620px] rounded-[2rem] border-2 border-slate-200 bg-slate-50 p-3 shadow-inner sm:p-5">
+        <div className="mx-auto flex h-16 w-[62%] items-center justify-center rounded-t-[5rem] border-x-2 border-t-2 border-slate-300 bg-white font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
           Cabina
         </div>
-        <div className="max-h-[560px] overflow-y-auto border-x-2 border-border bg-card px-3 py-3 sm:px-6">
+        <div className="mb-3 flex flex-wrap items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs">
+          <span className="mr-1 font-semibold text-muted-foreground">Columnas:</span>
+          {columns.map((column) => (
+            <button
+              key={column}
+              type="button"
+              onClick={() =>
+                onSelect(allSeats.filter((seat) => seat.letra === column).map((seat) => seat.id))
+              }
+              className="size-7 rounded-md border border-border font-mono text-xs font-semibold text-muted-foreground hover:border-primary hover:bg-muted hover:text-foreground"
+            >
+              {column}
+            </button>
+          ))}
+        </div>
+        <div className="max-h-[560px] overflow-y-auto rounded-b-[2rem] border-2 border-slate-200 bg-white px-3 py-3 sm:px-6">
           <div className="mb-2 grid grid-cols-[1fr_44px_1fr] text-center font-mono text-[11px] text-muted-foreground">
             <span>VENTANA</span>
             <span>PASILLO</span>
@@ -452,9 +515,10 @@ function CabinGrid({
             return (
               <div key={row} className="cursor-pointer">
                 {(rowIndex === 0 || previousTypeId !== typeId) && (
-                  <div className="my-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  <div className="my-3 flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                     <button
                       type="button"
+                      aria-label={`Seleccionar clase ${typeName}`}
                       onClick={() => onSelect(
                         Object.values(seatsByRow)
                           .flat()
@@ -468,7 +532,7 @@ function CabinGrid({
                     <span className="h-px flex-1 bg-border" />
                   </div>
                 )}
-                <div className="grid grid-cols-[1fr_44px_1fr] items-center gap-1 py-1">
+                <div className="grid grid-cols-[1fr_44px_1fr] items-center gap-1 border-b border-slate-100 py-1.5 last:border-b-0">
                   <SeatGroup
                     seats={left}
                     typeNames={typeNames}
@@ -479,7 +543,8 @@ function CabinGrid({
                     <button
                       type="button"
                       onClick={() => onSelect(rowSeats.map((seat) => seat.id))}
-                      className="font-mono text-[10px] text-muted-foreground hover:text-foreground hover:underline"
+                      aria-label={`Seleccionar fila ${row}`}
+                      className="size-8 rounded-md border border-border bg-slate-50 font-mono text-[10px] text-muted-foreground hover:border-primary hover:bg-muted hover:text-foreground"
                     >
                       {row}
                     </button>

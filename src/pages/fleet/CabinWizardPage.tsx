@@ -13,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { getPlanes, type Plane } from "@/services/planeService";
 import { getSeatTypes, type SeatType } from "@/services/seatTypeService";
+import { getFlights } from "@/services/flightService";
 import {
   createCabinBulk,
   formatCabin,
@@ -46,13 +47,22 @@ export default function CabinWizardPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [notice, setNotice] = useState("");
+  const [usedInFlights, setUsedInFlights] = useState(0);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [planes, types] = await Promise.all([getPlanes(), getSeatTypes()]);
-        setAirplane(planes.find((plane) => plane.id === Number(avionId)) ?? null);
+        const [planes, types, flights] = await Promise.all([
+          getPlanes(),
+          getSeatTypes(),
+          getFlights(),
+        ]);
+        const selectedAirplaneId = Number(avionId);
+        setAirplane(planes.find((plane) => plane.id === selectedAirplaneId) ?? null);
         setSeatTypes(types);
+        setUsedInFlights(
+          flights.filter((flight) => flight.avionId === selectedAirplaneId).length,
+        );
       } catch {
         setNotice("No se pudieron cargar los datos de la cabina.");
       } finally {
@@ -108,7 +118,7 @@ export default function CabinWizardPage() {
     );
   };
   const handleGenerateSeats = async () => {
-    if (!airplane || !columns || generating) return;
+    if (!airplane || !columns || generating || usedInFlights > 0) return;
 
     setNotice("");
     setGenerating(true);
@@ -134,7 +144,7 @@ export default function CabinWizardPage() {
 
       await formatCabin(airplane.id);
       await createCabinBulk(payload);
-      navigate("/flota/mapa-asientos");
+      navigate(`/flota/mapa-asientos?avionId=${airplane.id}`);
     } catch (cause) {
       console.error(cause);
       setNotice(
@@ -186,6 +196,11 @@ export default function CabinWizardPage() {
         Paso {currentStep} de 3 · {steps[currentStep - 1]}
       </p>
       {notice && <div className="mt-4 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-2 text-sm text-destructive">{notice}</div>}
+      {usedInFlights > 0 && (
+        <div className="mt-4 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          Este avión ya está asociado a {usedInFlights} vuelo{usedInFlights === 1 ? "" : "s"}. Su distribución de asientos está protegida para no alterar vuelos existentes.
+        </div>
+      )}
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
         <Card className="rounded-xl">
           <CardContent className="p-5 md:p-7">
@@ -231,7 +246,7 @@ export default function CabinWizardPage() {
                     <p className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">Esta acción sobrescribirá la cabina actual del avión.</p>
                   </div>
                 )}
-                <div className="mt-8 flex items-center justify-between border-t border-border pt-5"><Button variant="ghost" onClick={() => currentStep === 1 ? navigate("/flota/mapa-asientos") : setCurrentStep(currentStep - 1)}>{currentStep === 1 ? "Cancelar" : <><ArrowLeft className="size-4" /> Atrás</>}</Button>{currentStep < 3 ? <Button disabled={!canContinue} onClick={() => setCurrentStep(currentStep + 1)}>Continuar <ArrowRight className="size-4" /></Button> : <Button disabled={generating} onClick={handleGenerateSeats}>{generating ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}{generating ? "Generando..." : "Generar Cabina"}</Button>}</div>
+                <div className="mt-8 flex items-center justify-between border-t border-border pt-5"><Button variant="ghost" onClick={() => currentStep === 1 ? navigate(`/flota/mapa-asientos?avionId=${airplane.id}`) : setCurrentStep(currentStep - 1)}>{currentStep === 1 ? "Cancelar" : <><ArrowLeft className="size-4" /> Atrás</>}</Button>{currentStep < 3 ? <Button disabled={!canContinue || usedInFlights > 0} onClick={() => setCurrentStep(currentStep + 1)}>Continuar <ArrowRight className="size-4" /></Button> : <Button disabled={generating || usedInFlights > 0} onClick={handleGenerateSeats}>{generating ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}{generating ? "Generando..." : "Generar Cabina"}</Button>}</div>
               </>
             )}
           </CardContent>
