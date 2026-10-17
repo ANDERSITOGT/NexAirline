@@ -5,9 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { flights, fmtTime, planeById, planes, routeLabel, type Flight } from "../data1";
-import { reservas } from "../data2";
-import { mantenimientos } from "../data3";
+import { flights, fmtTime, planeById, planes, routeLabel, type Flight } from "@/data1";
+import { reservas } from "@/data2";
+import { mantenimientos } from "@/data3";
 
 function Kpi({ label, value, delta, icon: Icon, tone }: { label: string; value: string; delta: string; icon: typeof Ticket; tone: string }) {
   return (

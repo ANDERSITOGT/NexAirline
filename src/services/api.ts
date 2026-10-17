@@ -1,4 +1,4 @@
-const API_PREFIX = "/api";
+const API_PREFIX: string = import.meta.env.VITE_API_URL || "/api";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -31,7 +31,7 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
-  const response = await fetch(withApiPrefix(endpoint), { ...options, headers });
+  const response = await fetch(withApiPrefix(endpoint), { ...options, headers, credentials: "include" });
   const text = await response.text();
   let payload: unknown;
 

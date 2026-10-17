@@ -1,8 +1,8 @@
-import RouterComponent from "./components/Router";
+import AppRouter from "@/routes/AppRouter";
 
 function App() {
   return (
-    <RouterComponent />
+    <AppRouter />
   );
 }
 

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   Plane, LayoutDashboard, PlaneTakeoff, Ticket, ChevronDown, ChevronRight, Bell, Search,
-  Building2, Armchair, Shuffle, Database, CreditCard, ShieldCheck, ScrollText, MoreHorizontal, Home,
+  Building2, Armchair, Shuffle, CreditCard, ShieldCheck, ScrollText, MoreHorizontal, Home,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
@@ -31,9 +31,8 @@ const nav: NavGroup[] = [
   ] },
   { name: "Seguridad", items: [
     { id: "seguridad", label: "Roles y errores", icon: ShieldCheck },
-    { id: "bitacora", label: "Bitácora de asientos", icon: ScrollText },
-    { id: "modelo", label: "Modelo de datos", icon: Database },
-  ] },
+    { id: "bitacora", label: "Bitácora de asientos", icon: ScrollText }
+   ] },
 ];
 
 const allItems = nav.flatMap((group) => group.items);

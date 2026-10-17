@@ -12,11 +12,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { getAirports, type Airport } from "../services/airportService";
-import { getPlanes, type Plane } from "../services/planeService";
-import { getRoutes, type Route } from "../services/routeService";
-import { getGates, type Gate } from "../services/gateService";
-import { createFlight, type CreateFlightDTO } from "../services/flightService";
+import { getAirports, type Airport } from "@/services/airportService";
+import { getPlanes, type Plane } from "@/services/planeService";
+import { getRoutes, type Route } from "@/services/routeService";
+import { getGates, type Gate } from "@/services/gateService";
+import { createFlight, type CreateFlightDTO } from "@/services/flightService";
 
 const steps = ["Ruta", "Aeronave", "Puerta y horarios"];
 const capacityFilters = [0, 150, 180, 250];
@@ -368,7 +368,10 @@ export default function Wizard() {
                           />
                         </div>
                       </Field>
-                      <Field label="Fecha de llegada" hint="Puede ser el día siguiente si el vuelo cruza medianoche.">
+                      <Field
+                        label="Fecha de llegada"
+                        hint="Puede ser el día siguiente si el vuelo cruza medianoche."
+                      >
                         <div className="relative">
                           <CalendarDays className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground" />
                           <Input
@@ -376,7 +379,9 @@ export default function Wizard() {
                             className="pr-10 font-mono"
                             value={arrivalDate}
                             min={departureDate}
-                            onChange={(event) => setArrivalDate(event.target.value)}
+                            onChange={(event) =>
+                              setArrivalDate(event.target.value)
+                            }
                           />
                         </div>
                       </Field>
