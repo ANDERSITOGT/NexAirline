@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Country, City } from "country-state-city";
 import {
   ArrowUpDown,
+  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -27,6 +28,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { AppBreadcrumb } from "@/components/navigation/AppBreadcrumb";
 import { Input } from "@/components/ui/input";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -44,7 +50,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { gates as seedGateNumbers, fmtDuration } from "@/data1";
+import { fmtDuration } from "@/data1";
 import { type Gate } from "@/services/gateService";
 import {
   createAirport,
@@ -118,7 +124,12 @@ function Field({
   );
 }
 
-type SearchableOption = { value: string; label: string; searchText?: string };
+type SearchableOption = {
+  value: string;
+  label: string;
+  description?: string;
+  searchText?: string;
+};
 
 function SearchableSelect({
   value,
@@ -137,7 +148,6 @@ function SearchableSelect({
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const searchRef = useRef<HTMLInputElement>(null);
   const selectedOption = options.find((option) => option.value === value);
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const filteredOptions = options.filter((option) =>
@@ -146,36 +156,41 @@ function SearchableSelect({
       .includes(normalizedSearch),
   );
 
-  useEffect(() => {
-    if (open) searchRef.current?.focus();
-  }, [open]);
-
   const close = () => {
     setOpen(false);
     setSearch("");
   };
 
   return (
-    <div className="relative">
-      <button
-        type="button"
-        disabled={disabled}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-left text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-        onClick={() => setOpen((current) => !current)}
-      >
-        <span className={selectedOption ? "text-foreground" : "text-muted-foreground"}>
-          {selectedOption?.label ?? placeholder}
-        </span>
-        <ChevronDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" />
-      </button>
-      {open && (
-        <div className="absolute left-0 top-full z-10 mt-1 w-full overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md">
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) setSearch("");
+      }}
+      modal={false}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-normal"
+        >
+          <span className={selectedOption ? "text-foreground" : "text-muted-foreground"}>
+            {selectedOption?.label ?? placeholder}
+          </span>
+          <ChevronDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+        <div className="bg-popover text-popover-foreground">
           <div className="flex items-center border-b px-3">
             <Search className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
             <Input
-              ref={searchRef}
+              autoFocus
               value={search}
               placeholder={searchPlaceholder}
               onChange={(event) => setSearch(event.target.value)}
@@ -201,20 +216,27 @@ function SearchableSelect({
                   type="button"
                   role="option"
                   aria-selected={option.value === value}
-                  className="flex w-full cursor-pointer items-center rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:outline-none"
+                  className="flex w-full cursor-pointer items-center rounded-sm px-2 py-2 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
                   onClick={() => {
                     onChange(option.value);
                     close();
                   }}
                 >
-                  {option.label}
+                  <span className="min-w-0">
+                    <span className="block font-semibold">{option.label}</span>
+                    {option.description && (
+                      <span className="block text-xs text-muted-foreground">
+                        {option.description}
+                      </span>
+                    )}
+                  </span>
                 </button>
               ))
             )}
           </div>
         </div>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -234,32 +256,6 @@ function Status({
         {active ? "Activo" : "Inactivo"}
       </Badge>
     </div>
-  );
-}
-
-function CatalogTable({
-  children,
-  headings,
-}: {
-  children: ReactNode;
-  headings: string[];
-}) {
-  return (
-    <Table className="min-w-[700px]">
-      <TableHeader>
-        <TableRow>
-          {headings.map((heading) => (
-            <TableHead
-              key={heading}
-              className="px-4 py-3 text-xs font-semibold uppercase tracking-wide"
-            >
-              {heading}
-            </TableHead>
-          ))}
-        </TableRow>
-      </TableHeader>
-      <TableBody>{children}</TableBody>
-    </Table>
   );
 }
 
@@ -284,6 +280,21 @@ export default function Infrastructure() {
   const [globalFilterTerminal, setGlobalFilterTerminal] = useState("");
   const [sortingTerminal, setSortingTerminal] = useState<SortingState>([]);
   const [paginationTerminal, setPaginationTerminal] =
+    useState<PaginationState>({
+      pageIndex: 0,
+      pageSize: 10,
+    });
+  const [openGateTerminal, setOpenGateTerminal] = useState(false);
+  const [gateTerminalSearch, setGateTerminalSearch] = useState("");
+  const [globalFilterGate, setGlobalFilterGate] = useState("");
+  const [sortingGate, setSortingGate] = useState<SortingState>([]);
+  const [paginationGate, setPaginationGate] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: 10,
+  });
+  const [globalFilterRoute, setGlobalFilterRoute] = useState("");
+  const [sortingRoute, setSortingRoute] = useState<SortingState>([]);
+  const [paginationRoute, setPaginationRoute] =
     useState<PaginationState>({
       pageIndex: 0,
       pageSize: 10,
@@ -331,7 +342,8 @@ export default function Infrastructure() {
     !route.aeropuertoOrigenId ||
     !route.aeropuertoDestinoId ||
     route.aeropuertoOrigenId === route.aeropuertoDestinoId ||
-    !route.duracionEstimada;
+    !route.duracionEstimada ||
+    !route.distancia;
   const canSave =
     panel === "aeropuertos"
       ? !!airport.nombre &&
@@ -720,6 +732,332 @@ export default function Infrastructure() {
     getSortedRowModel: getSortedRowModel(),
   });
 
+  const routeAirportLabel = (id: number) => {
+    const airport = airportById(id);
+    return airport
+      ? `${airport.codigoIata} ${airport.nombre} ${airport.ciudad} ${airport.pais}`
+      : String(id);
+  };
+
+  const routeColumns: LegacyColumnDef<Route>[] = [
+    {
+      id: "origen",
+      accessorFn: (item) => routeAirportLabel(item.aeropuertoOrigenId),
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-3 h-8 px-3 text-xs font-semibold uppercase tracking-wide"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Origen
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => {
+        const airport = airportById(row.original.aeropuertoOrigenId);
+        return (
+          <div>
+            <Badge>{airport?.codigoIata ?? row.original.aeropuertoOrigenId}</Badge>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {airport ? `${airport.ciudad}, ${airport.pais}` : "—"}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      id: "destino",
+      accessorFn: (item) => routeAirportLabel(item.aeropuertoDestinoId),
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-3 h-8 px-3 text-xs font-semibold uppercase tracking-wide"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Destino
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => {
+        const airport = airportById(row.original.aeropuertoDestinoId);
+        return (
+          <div>
+            <Badge>{airport?.codigoIata ?? row.original.aeropuertoDestinoId}</Badge>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {airport ? `${airport.ciudad}, ${airport.pais}` : "—"}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "duracionEstimada",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-3 h-8 px-3 text-xs font-semibold uppercase tracking-wide"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Duración est.
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => (
+        <span className="font-mono">{fmtDuration(row.original.duracionEstimada)}</span>
+      ),
+    },
+    {
+      accessorKey: "distancia",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-3 h-8 px-3 text-xs font-semibold uppercase tracking-wide"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Distancia
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) =>
+        row.original.distancia ? (
+          <span className="font-mono">
+            {row.original.distancia.toLocaleString("en-US")} km
+          </span>
+        ) : (
+          "—"
+        ),
+    },
+    {
+      accessorKey: "activa",
+      header: "Activa",
+      cell: ({ row }) => {
+        const item = row.original;
+        return (
+          <Status
+            active={item.activa}
+            onChange={async (active) => {
+              const previousActive = item.activa;
+              setRoutes((items) =>
+                items.map((currentItem) =>
+                  currentItem.id === item.id
+                    ? { ...currentItem, activa: active }
+                    : currentItem,
+                ),
+              );
+              try {
+                const updated = await updateRoute(item.id, {
+                  aeropuertoOrigenId: item.aeropuertoOrigenId,
+                  aeropuertoDestinoId: item.aeropuertoDestinoId,
+                  duracionEstimada: item.duracionEstimada,
+                  distancia: item.distancia,
+                  activa: active,
+                });
+                setRoutes((items) =>
+                  items.map((currentItem) =>
+                    currentItem.id === updated.id ? updated : currentItem,
+                  ),
+                );
+              } catch {
+                setRoutes((items) =>
+                  items.map((currentItem) =>
+                    currentItem.id === item.id
+                      ? { ...currentItem, activa: previousActive }
+                      : currentItem,
+                  ),
+                );
+                setNotice("No se pudo actualizar el estado de la ruta");
+              }
+            }}
+            label="Ruta activa"
+          />
+        );
+      },
+    },
+    {
+      id: "acciones",
+      header: "",
+      enableSorting: false,
+      cell: ({ row }) => {
+        const item = row.original;
+        return (
+          <div className="text-right">
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Editar ruta"
+              onClick={() => {
+                setRoute({ ...item });
+                setPanel("rutas");
+              }}
+            >
+              <Pencil className="size-3.5" />
+            </Button>
+          </div>
+        );
+      },
+    },
+  ];
+
+  const routeTable = useLegacyTable({
+    data: routes,
+    columns: routeColumns,
+    state: {
+      globalFilter: globalFilterRoute,
+      sorting: sortingRoute,
+      pagination: paginationRoute,
+    },
+    onGlobalFilterChange: setGlobalFilterRoute,
+    onSortingChange: setSortingRoute,
+    onPaginationChange: setPaginationRoute,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+  void routeTable;
+
+  const gateColumns: LegacyColumnDef<Gate>[] = [
+    {
+      id: "terminal",
+      accessorFn: (item) => {
+        const terminalItem = terminalById(item.sedeId);
+        const airport = terminalItem
+          ? airports.find((a) => a.id === terminalItem.aeropuertoId)
+          : undefined;
+        return `${terminalItem?.nombre ?? ""} ${airport?.codigoIata ?? ""} ${airport?.nombre ?? ""} ${airport?.ciudad ?? ""} ${airport?.pais ?? ""}`;
+      },
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-3 h-8 px-3 text-xs font-semibold uppercase tracking-wide"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Terminal
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => {
+        const terminalItem = terminalById(row.original.sedeId);
+        const airport = terminalItem
+          ? airports.find((a) => a.id === terminalItem.aeropuertoId)
+          : undefined;
+        return (
+          <div>
+            <div className="font-semibold">
+              {airport?.codigoIata ? `${airport.codigoIata} · ` : ""}
+              {terminalItem?.nombre ?? "Terminal no disponible"}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {airport
+                ? `${airport.ciudad}, ${airport.pais}`
+                : "Aeropuerto no disponible"}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "numero",
+      header: "Puerta",
+      cell: ({ row }) => (
+        <Badge variant="outline" className="font-mono">
+          {row.original.numero}
+        </Badge>
+      ),
+    },
+    {
+      accessorKey: "descripcion",
+      header: "Descripción",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">
+          {row.original.descripcion || "-"}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "activo",
+      header: "Activa",
+      cell: ({ row }) => {
+        const item = row.original;
+        return (
+          <Status
+            active={item.activo}
+            onChange={async (active) => {
+              const previousActive = item.activo;
+              setGates((items) =>
+                items.map((currentItem) =>
+                  currentItem.id === item.id
+                    ? { ...currentItem, activo: active }
+                    : currentItem,
+                ),
+              );
+              try {
+                const updated = await updateGate(item.id, {
+                  sedeId: item.sedeId,
+                  numero: item.numero,
+                  descripcion: item.descripcion,
+                  activo: active,
+                });
+                setGates((items) =>
+                  items.map((currentItem) =>
+                    currentItem.id === updated.id ? updated : currentItem,
+                  ),
+                );
+              } catch {
+                setGates((items) =>
+                  items.map((currentItem) =>
+                    currentItem.id === item.id
+                      ? { ...currentItem, activo: previousActive }
+                      : currentItem,
+                  ),
+                );
+                setNotice("No se pudo actualizar el estado de la puerta");
+              }
+            }}
+            label={`Activa ${item.numero}`}
+          />
+        );
+      },
+    },
+    {
+      id: "acciones",
+      header: "Acciones",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <div className="text-right">
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label={`Editar ${row.original.numero}`}
+            onClick={() => {
+              setGate({ ...row.original });
+              setPanel("puertas");
+            }}
+          >
+            <Pencil className="size-3.5" />
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
+  const gateTable = useLegacyTable({
+    data: gates,
+    columns: gateColumns,
+    state: {
+      globalFilter: globalFilterGate,
+      sorting: sortingGate,
+      pagination: paginationGate,
+    },
+    onGlobalFilterChange: setGlobalFilterGate,
+    onSortingChange: setSortingGate,
+    onPaginationChange: setPaginationGate,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
   return (
     <div>
       <AppBreadcrumb
@@ -997,182 +1335,202 @@ export default function Infrastructure() {
               </div>
             </TabsContent>
             <TabsContent value="rutas" className="mt-0">
-              <CatalogTable
-                headings={[
-                  "Origen",
-                  "Destino",
-                  "Duración est.",
-                  "Distancia",
-                  "Activa",
-                  "",
-                ]}
-              >
-                {isLoadingRoutes ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={6}
-                      className="p-8 text-center text-muted-foreground"
-                    >
-                      Cargando rutas…
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  routes.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className={cellClass}>
-                        <span className="font-mono font-semibold">
-                          {airportById(item.aeropuertoOrigenId)?.codigoIata ??
-                            "—"}
-                        </span>{" "}
-                        <span className="text-muted-foreground">
-                          {airportById(item.aeropuertoOrigenId)?.ciudad}
-                        </span>
-                      </TableCell>
-                      <TableCell className={cellClass}>
-                        <span className="font-mono font-semibold">
-                          {airportById(item.aeropuertoDestinoId)?.codigoIata ??
-                            "—"}
-                        </span>{" "}
-                        <span className="text-muted-foreground">
-                          {airportById(item.aeropuertoDestinoId)?.ciudad}
-                        </span>
-                      </TableCell>
-                      <TableCell className={`${cellClass} font-mono`}>
-                        {fmtDuration(item.duracionEstimada)}
-                      </TableCell>
-                      <TableCell className={`${cellClass} font-mono`}>
-                        {item.distancia
-                          ? `${item.distancia.toLocaleString("es-GT")} km`
-                          : "—"}
-                      </TableCell>
-                      <TableCell className={cellClass}>
-                        <Status
-                          active={item.activa}
-                          onChange={async (active) => {
-                            try {
-                              const updated = await updateRoute(item.id, {
-                                aeropuertoOrigenId: item.aeropuertoOrigenId,
-                                aeropuertoDestinoId: item.aeropuertoDestinoId,
-                                duracionEstimada: item.duracionEstimada,
-                                distancia: item.distancia,
-                                activa: active,
-                              });
-                              setRoutes((items) =>
-                                items.map((currentItem) =>
-                                  currentItem.id === updated.id
-                                    ? updated
-                                    : currentItem,
-                                ),
-                              );
-                            } catch {
-                              setNotice(
-                                "No se pudo actualizar el estado de la ruta",
-                              );
-                            }
-                          }}
-                          label="Ruta activa"
-                        />
-                      </TableCell>
-                      <TableCell className={`${cellClass} text-right`}>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          aria-label="Editar ruta"
-                          onClick={() => {
-                            setRoute({ ...item });
-                            setPanel("rutas");
-                          }}
-                        >
-                          <Pencil className="size-3.5" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </CatalogTable>
-            </TabsContent>
-            <TabsContent value="puertas" className="mt-0">
-              <CatalogTable
-                headings={["Terminal", "Puerta", "Descripción", "Activa", ""]}
-              >
-                {isLoadingGates ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={5}
-                      className="p-8 text-center text-muted-foreground"
-                    >
-                      Cargando puertas…
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  gates.map((item) => {
-                    const terminalItem = terminalById(item.sedeId);
-                    return (
-                      <TableRow key={item.id}>
-                        <TableCell className={cellClass}>
-                          <span className="font-mono font-semibold">
-                            {terminalItem
-                              ? airportById(terminalItem.aeropuertoId)
-                                  ?.codigoIata
-                              : "—"}
-                          </span>{" "}
-                          · {terminalItem?.nombre}
-                        </TableCell>
-                        <TableCell
-                          className={`${cellClass} font-mono font-medium`}
-                        >
-                          {item.numero}
-                        </TableCell>
-                        <TableCell
-                          className={`${cellClass} text-muted-foreground`}
-                        >
-                          {item.descripcion || "—"}
-                        </TableCell>
-                        <TableCell className={cellClass}>
-                          <Status
-                            active={item.activo}
-                            onChange={async (active) => {
-                              try {
-                                const updated = await updateGate(item.id, {
-                                  sedeId: item.sedeId,
-                                  numero: item.numero,
-                                  descripcion: item.descripcion,
-                                  activo: active,
-                                });
-                                setGates((items) =>
-                                  items.map((currentItem) =>
-                                    currentItem.id === updated.id
-                                      ? updated
-                                      : currentItem,
-                                  ),
-                                );
-                              } catch {
-                                setNotice(
-                                  "No se pudo actualizar el estado de la puerta",
-                                );
-                              }
-                            }}
-                            label={`Activa ${item.numero}`}
-                          />
-                        </TableCell>
-                        <TableCell className={`${cellClass} text-right`}>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            aria-label={`Editar ${item.numero}`}
-                            onClick={() => {
-                              setGate({ ...item });
-                              setPanel("puertas");
-                            }}
+              <div className="flex items-center justify-between gap-4 py-4">
+                <div className="relative max-w-sm flex-1">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por origen, destino, país..."
+                    value={globalFilterRoute ?? ""}
+                    onChange={(event) =>
+                      setGlobalFilterRoute(event.target.value)
+                    }
+                    className="pl-8"
+                  />
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <Table className="min-w-[800px]">
+                  <TableHeader>
+                    {routeTable.getHeaderGroups().map((headerGroup) => (
+                      <TableRow key={headerGroup.id}>
+                        {headerGroup.headers.map((header) => (
+                          <TableHead
+                            key={header.id}
+                            className="px-4 py-3 text-xs font-semibold uppercase tracking-wide"
                           >
-                            <Pencil className="size-3.5" />
-                          </Button>
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext(),
+                                )}
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableHeader>
+                  <TableBody>
+                    {isLoadingRoutes ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={routeColumns.length}
+                          className="p-8 text-center text-muted-foreground"
+                        >
+                          Cargando rutas…
                         </TableCell>
                       </TableRow>
-                    );
-                  })
-                )}
-              </CatalogTable>
+                    ) : routeTable.getRowModel().rows.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={routeColumns.length}
+                          className="p-8 text-center text-muted-foreground"
+                        >
+                          No se encontraron rutas que coincidan con la búsqueda
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      routeTable.getRowModel().rows.map((row) => (
+                        <TableRow key={row.id}>
+                          {row.getVisibleCells().map((cell) => (
+                            <TableCell key={cell.id} className={cellClass}>
+                              {flexRender(
+                                cell.column.columnDef.cell,
+                                cell.getContext(),
+                              )}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="flex items-center justify-between py-4 text-sm text-muted-foreground">
+                <div>
+                  Mostrando {routeTable.getRowModel().rows.length} de {routes.length} registros
+                </div>
+                <div className="flex items-center gap-2">
+                  <span>
+                    Página {routeTable.getState().pagination.pageIndex + 1} de {Math.max(1, routeTable.getPageCount())}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => routeTable.previousPage()}
+                    disabled={!routeTable.getCanPreviousPage()}
+                    aria-label="Página anterior"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => routeTable.nextPage()}
+                    disabled={!routeTable.getCanNextPage()}
+                    aria-label="Página siguiente"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </TabsContent>
+            <TabsContent value="puertas" className="mt-0">
+              <div className="flex items-center justify-between gap-4 px-4 py-4">
+                <div className="relative max-w-sm flex-1">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por terminal, puerta, aeropuerto, país..."
+                    value={globalFilterGate}
+                    onChange={(event) => setGlobalFilterGate(event.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <Table className="min-w-[800px]">
+                  <TableHeader>
+                    {gateTable.getHeaderGroups().map((headerGroup) => (
+                      <TableRow key={headerGroup.id}>
+                        {headerGroup.headers.map((header) => (
+                          <TableHead
+                            key={header.id}
+                            className="px-4 py-3 text-xs font-semibold uppercase tracking-wide"
+                          >
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext(),
+                                )}
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableHeader>
+                  <TableBody>
+                    {isLoadingGates ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={gateColumns.length}
+                          className="p-8 text-center text-muted-foreground"
+                        >
+                          Cargando puertas…
+                        </TableCell>
+                      </TableRow>
+                    ) : gateTable.getRowModel().rows.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={gateColumns.length}
+                          className="p-8 text-center text-muted-foreground"
+                        >
+                          No se encontraron puertas de embarque registradas
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      gateTable.getRowModel().rows.map((row) => (
+                        <TableRow key={row.id}>
+                          {row.getVisibleCells().map((cell) => (
+                            <TableCell key={cell.id} className={cellClass}>
+                              {flexRender(
+                                cell.column.columnDef.cell,
+                                cell.getContext(),
+                              )}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="flex items-center justify-between px-4 py-4 text-sm text-muted-foreground">
+                <div>
+                  Mostrando {gateTable.getRowModel().rows.length} de {gateTable.getFilteredRowModel().rows.length} registros
+                </div>
+                <div className="flex items-center gap-2">
+                  <span>
+                    Página {gateTable.getState().pagination.pageIndex + 1} de {Math.max(1, gateTable.getPageCount())}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => gateTable.previousPage()}
+                    disabled={!gateTable.getCanPreviousPage()}
+                    aria-label="Página anterior"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => gateTable.nextPage()}
+                    disabled={!gateTable.getCanNextPage()}
+                    aria-label="Página siguiente"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             </TabsContent>
           </CardContent>
         </Card>
@@ -1182,9 +1540,11 @@ export default function Infrastructure() {
         <SheetContent className="overflow-y-auto sm:max-w-lg">
           <SheetHeader>
             <SheetTitle>
-              {panel === "aeropuertos" && airport.id
-                ? `Editar ${airport.iata}`
-                : `${panel ? "Nuevo" : ""} ${tabs.find((item) => item.id === panel)?.singular ?? ""}`}
+              {panel === "puertas"
+                ? `${gate.id ? "Editar" : "Nueva"} puerta de embarque`
+                : panel === "aeropuertos" && airport.id
+                  ? `Editar ${airport.iata}`
+                  : `${panel ? "Nuevo" : ""} ${tabs.find((item) => item.id === panel)?.singular ?? ""}`}
             </SheetTitle>
             <SheetDescription>
               {panel === "aeropuertos"
@@ -1193,7 +1553,7 @@ export default function Infrastructure() {
                   ? "Tabla Terminal"
                   : panel === "rutas"
                     ? "Tabla Ruta"
-                    : "Tabla Puerta_embarque"}
+                    : "Tabla Puerta de embarque"}
             </SheetDescription>
           </SheetHeader>
           <div className="grid gap-4 py-6">
@@ -1236,14 +1596,19 @@ export default function Infrastructure() {
                   </Field>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <Field label="País">
+                  <Field
+                    label="País"
+                    hint="Los nombres de países y ciudades pueden aparecer en inglés."
+                  >
                     <SearchableSelect
                       value={airport.pais}
                       placeholder="Seleccione un país"
-                      searchPlaceholder="Buscar país..."
+                      searchPlaceholder="Buscar país, ISO o prefijo..."
                       options={countries.map((country) => ({
                         value: country.name,
                         label: country.name,
+                        description: `${country.isoCode} · +${country.phonecode}`,
+                        searchText: `${country.name} ${country.isoCode} ${country.phonecode}`,
                       }))}
                       onChange={(value) =>
                         setAirport((prev) => ({
@@ -1254,7 +1619,10 @@ export default function Infrastructure() {
                       }
                     />
                   </Field>
-                  <Field label="Ciudad">
+                  <Field
+                    label="Ciudad"
+                    hint="Los nombres de ciudades pueden aparecer en inglés."
+                  >
                     <SearchableSelect
                       value={airport.ciudad}
                       placeholder="Seleccione una ciudad"
@@ -1300,6 +1668,7 @@ export default function Infrastructure() {
                     options={airports.map((airportItem) => ({
                       value: airportItem.id.toString(),
                       label: `${airportItem.codigoIata} · ${airportItem.nombre}`,
+                      description: `${airportItem.codigoIcao || "ICAO no disponible"} · ${airportItem.ciudad || "Ciudad no disponible"}, ${airportItem.pais || "País no disponible"}`,
                       searchText: `${airportItem.codigoIata} ${airportItem.codigoIcao || ""} ${airportItem.nombre} ${airportItem.ciudad || ""} ${airportItem.pais || ""}`,
                     }))}
                     onChange={(value) =>
@@ -1343,48 +1712,54 @@ export default function Infrastructure() {
             )}
             {panel === "rutas" && (
               <>
-                <Field label="Aeropuerto de origen">
-                  <select
-                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                    value={route.aeropuertoOrigenId ?? ""}
-                    onChange={(event) =>
-                      setRoute({
-                        ...route,
-                        aeropuertoOrigenId:
-                          Number(event.target.value) || undefined,
-                      })
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    Aeropuerto de origen
+                  </label>
+                  <SearchableSelect
+                    value={route.aeropuertoOrigenId?.toString() ?? ""}
+                    placeholder="Selecciona origen"
+                    searchPlaceholder="Buscar por IATA, ICAO, nombre, ciudad o país..."
+                    options={airports.map((airport) => ({
+                      value: airport.id.toString(),
+                      label: `${airport.codigoIata} · ${airport.nombre}`,
+                      description: `${airport.codigoIcao || "ICAO no disponible"} · ${airport.ciudad || "Ciudad no disponible"}, ${airport.pais || "País no disponible"}`,
+                      searchText: `${airport.codigoIata} ${airport.codigoIcao || ""} ${airport.nombre} ${airport.ciudad || ""} ${airport.pais || ""}`,
+                    }))}
+                    onChange={(value) =>
+                      setRoute((prev) => ({
+                        ...prev,
+                        aeropuertoOrigenId: Number(value) || undefined,
+                      }))
                     }
-                  >
-                    <option value="">Selecciona origen</option>
-                    {airports.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.codigoIata} · {item.ciudad}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Aeropuerto de destino">
-                  <select
-                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                    value={route.aeropuertoDestinoId ?? ""}
-                    onChange={(event) =>
-                      setRoute({
-                        ...route,
-                        aeropuertoDestinoId:
-                          Number(event.target.value) || undefined,
-                      })
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    Aeropuerto de destino
+                  </label>
+                  <SearchableSelect
+                    value={route.aeropuertoDestinoId?.toString() ?? ""}
+                    placeholder="Selecciona destino"
+                    searchPlaceholder="Buscar por IATA, ICAO, nombre, ciudad o país..."
+                    options={airports
+                      .filter(
+                        (airport) => airport.id !== route.aeropuertoOrigenId,
+                      )
+                      .map((airport) => ({
+                        value: airport.id.toString(),
+                        label: `${airport.codigoIata} · ${airport.nombre}`,
+                        description: `${airport.codigoIcao || "ICAO no disponible"} · ${airport.ciudad || "Ciudad no disponible"}, ${airport.pais || "País no disponible"}`,
+                        searchText: `${airport.codigoIata} ${airport.codigoIcao || ""} ${airport.nombre} ${airport.ciudad || ""} ${airport.pais || ""}`,
+                      }))}
+                    onChange={(value) =>
+                      setRoute((prev) => ({
+                        ...prev,
+                        aeropuertoDestinoId: Number(value) || undefined,
+                      }))
                     }
-                  >
-                    <option value="">Selecciona destino</option>
-                    {airports
-                      .filter((item) => item.id !== route.aeropuertoOrigenId)
-                      .map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.codigoIata} · {item.ciudad}
-                        </option>
-                      ))}
-                  </select>
-                </Field>
+                  />
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Duración (min)">
                     <Input
@@ -1431,29 +1806,123 @@ export default function Infrastructure() {
             {panel === "puertas" && (
               <>
                 <Field label="Terminal">
-                  <select
-                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                    value={gate.sedeId ?? ""}
-                    onChange={(event) =>
-                      setGate({
-                        ...gate,
-                        sedeId: Number(event.target.value) || undefined,
-                      })
-                    }
+                  <Popover
+                    open={openGateTerminal}
+                    onOpenChange={(open) => {
+                      setOpenGateTerminal(open);
+                      if (!open) setGateTerminalSearch("");
+                    }}
+                    modal={false}
                   >
-                    <option value="">Selecciona terminal</option>
-                    {terminals.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.nombre} ·{" "}
-                        {airportById(item.aeropuertoId)?.codigoIata}
-                      </option>
-                    ))}
-                  </select>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={openGateTerminal}
+                        className="w-full justify-between font-normal"
+                      >
+                        {(() => {
+                          const selectedTerminal = terminalById(gate.sedeId ?? 0);
+                          const airport = selectedTerminal
+                            ? airports.find(
+                                (a) => a.id === selectedTerminal.aeropuertoId,
+                              )
+                            : undefined;
+                          return selectedTerminal
+                            ? `${airport?.codigoIata ? `${airport.codigoIata} · ` : ""}${selectedTerminal.nombre}`
+                            : "Selecciona una terminal";
+                        })()}
+                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                      <div className="bg-popover text-popover-foreground">
+                        <div className="flex items-center border-b px-3">
+                          <Search className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                          <Input
+                            autoFocus
+                            value={gateTerminalSearch}
+                            onChange={(event) =>
+                              setGateTerminalSearch(event.target.value)
+                            }
+                            placeholder="Buscar terminal, aeropuerto, ciudad o país..."
+                            className="h-11 border-0 px-0 shadow-none focus-visible:ring-0"
+                          />
+                        </div>
+                        <div className="max-h-[300px] overflow-y-auto p-1">
+                          {terminals.filter((t) => {
+                            const airport = airports.find(
+                              (a) => a.id === t.aeropuertoId,
+                            );
+                            const searchText = `${t.nombre} ${airport?.codigoIata || ""} ${airport?.nombre || ""} ${airport?.ciudad || ""} ${airport?.pais || ""}`;
+                            return searchText
+                              .toLocaleLowerCase()
+                              .includes(gateTerminalSearch.toLocaleLowerCase());
+                          }).length === 0 ? (
+                            <p className="py-6 text-center text-sm text-muted-foreground">
+                              No se encontraron terminales.
+                            </p>
+                          ) : (
+                            terminals
+                              .filter((t) => {
+                                const airport = airports.find(
+                                  (a) => a.id === t.aeropuertoId,
+                                );
+                                const searchText = `${t.nombre} ${airport?.codigoIata || ""} ${airport?.nombre || ""} ${airport?.ciudad || ""} ${airport?.pais || ""}`;
+                                return searchText
+                                  .toLocaleLowerCase()
+                                  .includes(
+                                    gateTerminalSearch.toLocaleLowerCase(),
+                                  );
+                              })
+                              .map((t) => {
+                                const airport = airports.find(
+                                  (a) => a.id === t.aeropuertoId,
+                                );
+                                return (
+                                  <button
+                                    key={t.id}
+                                    type="button"
+                                    className="flex w-full cursor-pointer items-center rounded-sm px-2 py-2 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+                                    onClick={() => {
+                                      setGate((currentGate) => ({
+                                        ...currentGate,
+                                        sedeId: t.id,
+                                      }));
+                                      setOpenGateTerminal(false);
+                                      setGateTerminalSearch("");
+                                    }}
+                                  >
+                                    <Check
+                                      className={`mr-2 h-4 w-4 shrink-0 ${gate.sedeId === t.id ? "opacity-100" : "opacity-0"}`}
+                                    />
+                                    <span>
+                                      <span className="block font-semibold">
+                                        {airport?.codigoIata
+                                          ? `${airport.codigoIata} · `
+                                          : ""}
+                                        {t.nombre}
+                                      </span>
+                                      <span className="block text-xs text-muted-foreground">
+                                        {airport?.nombre || "Aeropuerto"},{" "}
+                                        {airport?.ciudad || ""},{" "}
+                                        {airport?.pais || ""}
+                                      </span>
+                                    </span>
+                                  </button>
+                                );
+                              })
+                          )}
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </Field>
                 <Field label="Número de puerta">
                   <Input
-                    list="gate-numbers"
                     value={gate.numero ?? ""}
+                    autoComplete="off"
+                    placeholder="Ej. A12, B4, Gate 1"
                     onChange={(event) =>
                       setGate({
                         ...gate,
@@ -1462,11 +1931,6 @@ export default function Infrastructure() {
                     }
                     className="font-mono"
                   />
-                  <datalist id="gate-numbers">
-                    {seedGateNumbers.map((number) => (
-                      <option key={number} value={number} />
-                    ))}
-                  </datalist>
                 </Field>
                 <Field label="Descripción">
                   <Input

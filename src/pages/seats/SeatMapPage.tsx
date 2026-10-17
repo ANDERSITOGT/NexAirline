@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { Lock, LockOpen, Pencil } from "lucide-react";
+import {
+  Check,
+  ChevronsUpDown,
+  Lock,
+  LockOpen,
+  Pencil,
+  Search,
+} from "lucide-react";
 import { AppBreadcrumb } from "@/components/navigation/AppBreadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +19,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Sheet,
   SheetContent,
@@ -26,6 +38,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getPlanes, type Plane } from "@/services/planeService";
+import { getAirlines, type Airline } from "@/services/airlineService";
 import { getSeatTypes, type SeatType } from "@/services/seatTypeService";
 import {
   createSeat,
@@ -51,8 +64,11 @@ const TYPE_COLORS = [
 
 export default function SeatMap() {
   const [planes, setPlanes] = useState<Plane[]>([]);
+  const [airlines, setAirlines] = useState<Airline[]>([]);
   const [seatTypes, setSeatTypes] = useState<SeatType[]>([]);
   const [selectedPlaneId, setSelectedPlaneId] = useState<number>();
+  const [openAirplaneCombobox, setOpenAirplaneCombobox] = useState(false);
+  const [airplaneSearch, setAirplaneSearch] = useState("");
   const [seats, setSeats] = useState<Seat[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [editingSeat, setEditingSeat] = useState<Seat | null>(null);
@@ -72,9 +88,10 @@ export default function SeatMap() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    Promise.all([getPlanes(), getSeatTypes()])
-      .then(([loadedPlanes, loadedTypes]) => {
+    Promise.all([getPlanes(), getAirlines(), getSeatTypes()])
+      .then(([loadedPlanes, loadedAirlines, loadedTypes]) => {
         setPlanes(loadedPlanes);
+        setAirlines(loadedAirlines);
         setSeatTypes(loadedTypes);
         if (loadedPlanes[0]) setSelectedPlaneId(loadedPlanes[0].id);
       })
@@ -110,6 +127,22 @@ export default function SeatMap() {
     }
   };
   const plane = planes.find((item) => item.id === selectedPlaneId);
+  const getAirplaneDetails = (currentPlane: Plane) => {
+    const airline = airlines.find(
+      (item) => item.id === currentPlane.aerolineaId,
+    );
+    return {
+      airlineName: airline?.nombre || "Aerolínea no asignada",
+      airlineIata: airline?.codigoIata || "",
+      airlineCountry: airline?.pais || "",
+    };
+  };
+  const filteredPlanes = planes.filter((currentPlane) => {
+    const details = getAirplaneDetails(currentPlane);
+    return `${currentPlane.matricula} ${currentPlane.nombre || ""} ${details.airlineName} ${details.airlineIata} ${details.airlineCountry}`
+      .toLocaleLowerCase()
+      .includes(airplaneSearch.toLocaleLowerCase());
+  });
   const typeNames = Object.fromEntries(
     seatTypes.map((type) => [type.id, type.nombre]),
   );
@@ -266,25 +299,101 @@ export default function SeatMap() {
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <Card className="min-w-0 rounded-xl">
             <CardHeader>
-              <div className="grid gap-4 sm:grid-cols-[minmax(0,320px)_1fr] sm:items-end">
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,440px)_1fr] xl:items-end">
                 <label className="grid gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Aeronave
-                  <select
-                    className="h-10 rounded-md border border-input bg-background px-3 text-sm font-normal text-foreground"
-                    value={selectedPlaneId ?? ""}
-                    onChange={(event) =>
-                      setSelectedPlaneId(Number(event.target.value))
-                    }
+                  <Popover
+                    open={openAirplaneCombobox}
+                    onOpenChange={(open) => {
+                      setOpenAirplaneCombobox(open);
+                      if (!open) setAirplaneSearch("");
+                    }}
+                    modal={false}
                   >
-                    {planes.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.matricula}
-                        {item.nombre ? ` · ${item.nombre}` : ""}
-                      </option>
-                    ))}
-                  </select>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={openAirplaneCombobox}
+                        className="w-full justify-between text-left text-sm font-normal normal-case tracking-normal"
+                      >
+                        {plane ? (
+                          <span className="truncate">
+                            <span className="font-mono font-semibold">
+                              {plane.matricula}
+                            </span>{" "}
+                            {plane.nombre || "Modelo no especificado"} ·{" "}
+                            {getAirplaneDetails(plane).airlineName} ({plane.capacidad})
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            Selecciona una aeronave para ver su cabina...
+                          </span>
+                        )}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[440px] max-w-full p-0">
+                      <div className="bg-popover text-popover-foreground">
+                        <div className="flex items-center border-b px-3">
+                          <Search className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                          <Input
+                            autoFocus
+                            value={airplaneSearch}
+                            onChange={(event) => setAirplaneSearch(event.target.value)}
+                            placeholder="Buscar por matrícula, modelo, aerolínea o país..."
+                            className="h-11 border-0 px-0 shadow-none focus-visible:ring-0"
+                          />
+                        </div>
+                        <div className="max-h-72 overflow-y-auto p-1">
+                          {filteredPlanes.length === 0 ? (
+                            <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                              No se encontraron aeronaves.
+                            </p>
+                          ) : (
+                            filteredPlanes.map((currentPlane) => {
+                              const airlineDetails = getAirplaneDetails(currentPlane);
+                              return (
+                                <button
+                                  key={currentPlane.id}
+                                  type="button"
+                                  className="flex w-full cursor-pointer items-center rounded-sm px-2 py-2 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+                                  onClick={() => {
+                                    setSelectedPlaneId(currentPlane.id);
+                                    setOpenAirplaneCombobox(false);
+                                    setAirplaneSearch("");
+                                  }}
+                                >
+                                  <Check
+                                    className={`mr-2 h-4 w-4 shrink-0 ${selectedPlaneId === currentPlane.id ? "opacity-100" : "opacity-0"}`}
+                                  />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="flex items-center justify-between gap-3">
+                                      <span className="truncate">
+                                        <span className="font-mono font-semibold">
+                                          {currentPlane.matricula}
+                                        </span>{" "}
+                                        {currentPlane.nombre || "Modelo no especificado"}
+                                      </span>
+                                      <Badge variant="secondary" className="shrink-0">
+                                        {currentPlane.capacidad} asientos
+                                      </Badge>
+                                    </span>
+                                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                                      {airlineDetails.airlineIata || "—"} · {airlineDetails.airlineName} ({airlineDetails.airlineCountry || "País no disponible"})
+                                    </span>
+                                  </span>
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </label>
-                <div className="flex items-center justify-between gap-3 sm:justify-end">
+                <div className="flex flex-wrap items-center justify-between gap-3 xl:justify-end">
                   <span className="font-mono text-xs text-muted-foreground">
                     {plane?.nombre ?? plane?.matricula ?? "Sin aeronave"} ·{" "}
                     {plane?.capacidad ?? 0} asientos

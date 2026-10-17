@@ -1,10 +1,36 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Armchair, Pencil, Plus } from "lucide-react";
+import { Country } from "country-state-city";
 import { AppBreadcrumb } from "@/components/navigation/AppBreadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Armchair,
+  ArrowUpDown,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
+  Plus,
+  Search,
+} from "lucide-react";
+import { flexRender } from "@tanstack/react-table";
+import {
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  type LegacyColumnDef,
+  useLegacyTable,
+} from "@tanstack/react-table/legacy";
+import type { PaginationState, SortingState } from "@tanstack/table-core";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Sheet,
   SheetContent,
@@ -54,7 +80,14 @@ import {
 } from "@/services/seatTypeService";
 
 type Tab = "aeronaves" | "aerolineas" | "mantenimiento" | "tipos";
-type Option = { value: number; label: string; sub?: string; meta?: string };
+type Option = {
+  value: number;
+  label: string;
+  description?: string;
+  searchText?: string;
+  sub?: string;
+  meta?: string;
+};
 type AirlineForm = Partial<CreateAirlineDTO> & {
   activo?: boolean;
   id?: number;
@@ -123,23 +156,198 @@ function SelectField({
   onChange: (value: number | null) => void;
   placeholder: string;
 }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const filteredOptions = options.filter((option) =>
+    `${option.label} ${option.description ?? ""} ${option.searchText ?? ""} ${option.sub ?? ""} ${option.meta ?? ""}`
+      .toLocaleLowerCase()
+      .includes(search.toLocaleLowerCase()),
+  );
+  const selectedOption = options.find((option) => option.value === value);
+  const close = () => {
+    setOpen(false);
+    setSearch("");
+  };
+
   return (
-    <select
-      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm font-normal ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
-      value={value ?? ""}
-      onChange={(event) =>
-        onChange(event.target.value ? Number(event.target.value) : null)
-      }
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) setSearch("");
+      }}
+      modal={false}
     >
-      <option value="">{placeholder}</option>
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-          {option.sub ? ` · ${option.sub}` : ""}
-          {option.meta ? ` · ${option.meta}` : ""}
-        </option>
-      ))}
-    </select>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-normal"
+        >
+          <span className={selectedOption ? "text-foreground" : "text-muted-foreground"}>
+            {selectedOption?.label ?? placeholder}
+          </span>
+          <ChevronDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+        <div className="bg-popover text-popover-foreground">
+          <div className="flex items-center border-b px-3">
+            <Search className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+            <Input
+              autoFocus
+              value={search}
+              placeholder="Buscar por nombre, código o país..."
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") close();
+                if (event.key === "Enter" && filteredOptions[0]) {
+                  onChange(filteredOptions[0].value);
+                  close();
+                }
+              }}
+              className="h-11 border-0 px-0 shadow-none focus-visible:ring-0"
+            />
+          </div>
+          <div role="listbox" className="max-h-60 overflow-y-auto p-1">
+            {filteredOptions.length === 0 ? (
+              <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                No se encontraron resultados.
+              </p>
+            ) : (
+              filteredOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="option"
+                  aria-selected={option.value === value}
+                  className="flex w-full cursor-pointer items-center rounded-sm px-2 py-2 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+                  onClick={() => {
+                    onChange(option.value);
+                    close();
+                  }}
+                >
+                  <Check
+                    className={`mr-2 h-4 w-4 shrink-0 ${option.value === value ? "opacity-100" : "opacity-0"}`}
+                  />
+                  <span className="min-w-0">
+                    <span className="block font-semibold">{option.label}</span>
+                    {(option.description || option.sub || option.meta) && (
+                      <span className="block text-xs text-muted-foreground">
+                        {option.description ??
+                          [option.sub, option.meta].filter(Boolean).join(" · ")}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function CountryField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const countries = Country.getAllCountries();
+  const filteredCountries = countries.filter((country) =>
+    `${country.name} ${country.isoCode} ${country.phonecode}`
+      .toLocaleLowerCase()
+      .includes(search.toLocaleLowerCase()),
+  );
+  const selectedCountry = countries.find((country) => country.name === value);
+  const close = () => {
+    setOpen(false);
+    setSearch("");
+  };
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) setSearch("");
+      }}
+      modal={false}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-normal"
+        >
+          <span className={selectedCountry ? "text-foreground" : "text-muted-foreground"}>
+            {selectedCountry?.name ?? "Selecciona un país"}
+          </span>
+          <ChevronDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+        <div className="bg-popover text-popover-foreground">
+          <div className="flex items-center border-b px-3">
+            <Search className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+            <Input
+              autoFocus
+              value={search}
+              placeholder="Buscar país, ISO o prefijo..."
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") close();
+                if (event.key === "Enter" && filteredCountries[0]) {
+                  onChange(filteredCountries[0].name);
+                  close();
+                }
+              }}
+              className="h-11 border-0 px-0 shadow-none focus-visible:ring-0"
+            />
+          </div>
+          <div role="listbox" className="max-h-60 overflow-y-auto p-1">
+            {filteredCountries.length === 0 ? (
+              <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                No se encontraron países.
+              </p>
+            ) : (
+              filteredCountries.map((country) => (
+                <button
+                  key={country.isoCode}
+                  type="button"
+                  role="option"
+                  aria-selected={country.name === value}
+                  className="flex w-full cursor-pointer items-center rounded-sm px-2 py-2 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+                  onClick={() => {
+                    onChange(country.name);
+                    close();
+                  }}
+                >
+                  <Check
+                    className={`mr-2 h-4 w-4 shrink-0 ${country.name === value ? "opacity-100" : "opacity-0"}`}
+                  />
+                  <span>
+                    <span className="block font-semibold">{country.name}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {country.isoCode} · +{country.phonecode}
+                    </span>
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -163,6 +371,18 @@ export default function Fleet() {
   const [seatTypes, setSeatTypes] = useState<SeatType[]>([]);
   const [isLoadingSeatTypes, setIsLoadingSeatTypes] = useState(true);
   const [panel, setPanel] = useState<Tab | null>(null);
+  const [globalFilterPlane, setGlobalFilterPlane] = useState("");
+  const [sortingPlane, setSortingPlane] = useState<SortingState>([]);
+  const [paginationPlane, setPaginationPlane] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: 10,
+  });
+  const [globalFilterAirline, setGlobalFilterAirline] = useState("");
+  const [sortingAirline, setSortingAirline] = useState<SortingState>([]);
+  const [paginationAirline, setPaginationAirline] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: 10,
+  });
   const [planeForm, setPlaneForm] = useState<PlaneForm>({});
   const [airlineForm, setAirlineForm] = useState<AirlineForm>({});
   const [maintenanceForm, setMaintenanceForm] = useState<
@@ -196,9 +416,9 @@ export default function Fleet() {
     .filter((airline) => airline.activo)
     .map((airline) => ({
       value: airline.id,
-      label: airline.nombre,
-      sub: airline.pais,
-      meta: airline.codigoIata,
+      label: `${airline.codigoIata} · ${airline.nombre}`,
+      description: airline.pais,
+      searchText: `${airline.codigoIata} ${airline.codigoIcao} ${airline.nombre} ${airline.pais}`,
     }));
   const planeOptions = planes
     .filter((plane) => plane.activo)
@@ -339,6 +559,189 @@ export default function Fleet() {
   const seatCounts = seatTypeTotals(planes.filter((plane) => plane.activo));
   const activePlanes = planes.filter((plane) => plane.activo);
 
+  const planeColumns: LegacyColumnDef<Plane>[] = [
+    {
+      accessorKey: "matricula",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-3 h-8 px-3 text-xs font-semibold uppercase tracking-wide"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Matrícula <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => <span className="font-mono font-semibold">{row.original.matricula}</span>,
+    },
+    {
+      accessorKey: "nombre",
+      header: "Aeronave",
+      cell: ({ row }) => row.original.nombre ?? "—",
+    },
+    {
+      id: "aerolinea",
+      accessorFn: (plane) => airlineName(plane.aerolineaId),
+      header: "Aerolínea",
+      cell: ({ row }) => airlineName(row.original.aerolineaId),
+    },
+    {
+      accessorKey: "capacidad",
+      header: "Capacidad",
+      cell: ({ row }) => <span className="font-mono">{row.original.capacidad}</span>,
+    },
+    {
+      id: "estado",
+      accessorFn: (plane) => (plane.activo ? planeStatus(plane) : "Inactivo"),
+      header: "Estado operativo",
+      cell: ({ row }) => (
+        <StatusBadge value={row.original.activo ? planeStatus(row.original) : "Inactivo"} />
+      ),
+    },
+    {
+      accessorKey: "activo",
+      header: "Activo",
+      cell: ({ row }) => {
+        const plane = row.original;
+        return (
+          <Switch
+            checked={plane.activo}
+            onCheckedChange={async (active) => {
+              try {
+                const updated = await updatePlane(plane.id, {
+                  aerolineaId: plane.aerolineaId,
+                  matricula: plane.matricula,
+                  nombre: plane.nombre,
+                  capacidad: plane.capacidad,
+                  activo: active,
+                });
+                setPlanes((current) =>
+                  current.map((item) => (item.id === updated.id ? updated : item)),
+                );
+              } catch {
+                setNotice("No se pudo actualizar el estado de la aeronave");
+              }
+            }}
+            aria-label={`Activo ${plane.matricula}`}
+          />
+        );
+      },
+    },
+    {
+      id: "acciones",
+      header: "",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <div className="whitespace-nowrap text-right">
+          <Button variant="outline" size="icon" className="mr-1" aria-label="Ver mapa de asientos">
+            <Armchair className="size-3.5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label={`Editar ${row.original.matricula}`}
+            onClick={() => {
+              setPlaneForm({ ...row.original });
+              setPanel("aeronaves");
+            }}
+          >
+            <Pencil className="size-3.5" />
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
+  const airlineColumns: LegacyColumnDef<Airline>[] = [
+    {
+      accessorKey: "nombre",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-3 h-8 px-3 text-xs font-semibold uppercase tracking-wide"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Aerolínea <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => <span className="font-medium">{row.original.nombre}</span>,
+    },
+    { accessorKey: "codigoIata", header: "IATA", cell: ({ row }) => <span className="font-mono">{row.original.codigoIata}</span> },
+    { accessorKey: "codigoIcao", header: "ICAO", cell: ({ row }) => <span className="font-mono">{row.original.codigoIcao}</span> },
+    { accessorKey: "pais", header: "País", cell: ({ row }) => <span className="text-muted-foreground">{row.original.pais}</span> },
+    {
+      id: "aeronaves",
+      accessorFn: (airline) => planes.filter((plane) => plane.aerolineaId === airline.id).length,
+      header: "Aeronaves",
+      cell: ({ row }) => <span className="font-mono">{planes.filter((plane) => plane.aerolineaId === row.original.id).length}</span>,
+    },
+    {
+      accessorKey: "activo",
+      header: "Activa",
+      cell: ({ row }) => {
+        const airline = row.original;
+        return (
+          <Switch
+            checked={airline.activo}
+            onCheckedChange={async (active) => {
+              try {
+                const updated = await updateAirline(airline.id, { ...airline, activo: active });
+                setAirlines((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+              } catch {
+                setNotice("No se pudo actualizar el estado de la aerolínea");
+              }
+            }}
+            aria-label={`Activa ${airline.nombre}`}
+          />
+        );
+      },
+    },
+    {
+      id: "acciones",
+      header: "",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <div className="text-right">
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label={`Editar ${row.original.nombre}`}
+            onClick={() => {
+              setAirlineForm(row.original);
+              setPanel("aerolineas");
+            }}
+          >
+            <Pencil className="size-3.5" />
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
+  const planeTable = useLegacyTable({
+    data: planes,
+    columns: planeColumns,
+    state: { globalFilter: globalFilterPlane, sorting: sortingPlane, pagination: paginationPlane },
+    onGlobalFilterChange: setGlobalFilterPlane,
+    onSortingChange: setSortingPlane,
+    onPaginationChange: setPaginationPlane,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  });
+  const airlineTable = useLegacyTable({
+    data: airlines,
+    columns: airlineColumns,
+    state: { globalFilter: globalFilterAirline, sorting: sortingAirline, pagination: paginationAirline },
+    onGlobalFilterChange: setGlobalFilterAirline,
+    onSortingChange: setSortingAirline,
+    onPaginationChange: setPaginationAirline,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  });
+
   return (
     <div>
       <AppBreadcrumb
@@ -398,217 +801,149 @@ export default function Fleet() {
               <TabsTrigger
                 key={value}
                 value={value as string}
-                className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-accent data-[state=active]:bg-transparent"
+                className="group rounded-none px-4 py-3.5 font-medium text-muted-foreground shadow-none hover:bg-muted/50 hover:text-foreground data-[state=active]:bg-slate-900 data-[state=active]:font-semibold data-[state=active]:text-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900"
               >
                 {label}
-                <span className="ml-1 text-xs text-muted-foreground">
+                <Badge
+                  variant="secondary"
+                  className="ml-1 group-data-[state=active]:bg-white/20 group-data-[state=active]:text-white dark:group-data-[state=active]:bg-slate-900/20 dark:group-data-[state=active]:text-slate-900"
+                >
                   {count}
-                </span>
+                </Badge>
               </TabsTrigger>
             ))}
           </TabsList>
         </Tabs>
         {tab === "aeronaves" && (
-          <div className="overflow-x-auto">
+          <div>
+            <div className="flex items-center justify-between gap-4 border-b border-border px-4 py-4">
+              <div className="relative max-w-sm flex-1">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar aeronave, matrícula, modelo..."
+                  value={globalFilterPlane}
+                  onChange={(event) => setGlobalFilterPlane(event.target.value)}
+                  className="pl-8"
+                />
+              </div>
+            </div>
+            <div className="overflow-x-auto">
             <Table className="min-w-[850px]">
               <TableHeader>
-                <TableRow>
-                  {[
-                    "Matrícula",
-                    "Aeronave",
-                    "Aerolínea",
-                    "Capacidad",
-                    "Estado operativo",
-                    "Activo",
-                    "",
-                  ].map((head) => (
-                    <TableHead key={head}>{head}</TableHead>
-                  ))}
-                </TableRow>
+                {planeTable.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => (
+                      <TableHead key={header.id} className="px-4 py-3 text-xs font-semibold uppercase tracking-wide">
+                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                ))}
               </TableHeader>
               <TableBody>
                 {isLoadingPlanes ? (
                   <TableRow>
                     <TableCell
-                      colSpan={7}
+                      colSpan={planeColumns.length}
                       className="p-8 text-center text-muted-foreground"
                     >
                       Cargando aeronaves…
                     </TableCell>
                   </TableRow>
+                ) : planeTable.getRowModel().rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={planeColumns.length} className="p-8 text-center text-muted-foreground">
+                      No se encontraron aeronaves registradas
+                    </TableCell>
+                  </TableRow>
                 ) : (
-                  planes.map((plane) => (
-                    <TableRow key={plane.id}>
-                      <TableCell
-                        className={`${tableCell} font-mono font-semibold`}
-                      >
-                        {plane.matricula}
-                      </TableCell>
-                      <TableCell className={tableCell}>
-                        {plane.nombre ?? "—"}
-                      </TableCell>
-                      <TableCell
-                        className={`${tableCell} text-muted-foreground`}
-                      >
-                        {airlineName(plane.aerolineaId)}
-                      </TableCell>
-                      <TableCell className={`${tableCell} font-mono`}>
-                        {plane.capacidad}
-                      </TableCell>
-                      <TableCell className={tableCell}>
-                        <StatusBadge
-                          value={plane.activo ? planeStatus(plane) : "Inactivo"}
-                        />
-                      </TableCell>
-                      <TableCell className={tableCell}>
-                        <Switch
-                          checked={plane.activo}
-                          onCheckedChange={async (active) => {
-                            try {
-                              const updated = await updatePlane(plane.id, {
-                                aerolineaId: plane.aerolineaId,
-                                matricula: plane.matricula,
-                                nombre: plane.nombre,
-                                capacidad: plane.capacidad,
-                                activo: active,
-                              });
-                              setPlanes((current) =>
-                                current.map((item) =>
-                                  item.id === updated.id ? updated : item,
-                                ),
-                              );
-                            } catch {
-                              setNotice(
-                                "No se pudo actualizar el estado de la aeronave",
-                              );
-                            }
-                          }}
-                          aria-label={`Activo ${plane.matricula}`}
-                        />
-                      </TableCell>
-                      <TableCell
-                        className={`${tableCell} whitespace-nowrap text-right`}
-                      >
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="mr-1"
-                          aria-label="Ver mapa de asientos"
-                        >
-                          <Armchair className="size-3.5" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          aria-label={`Editar ${plane.matricula}`}
-                          onClick={() => {
-                            setPlaneForm({ ...plane });
-                            setPanel("aeronaves");
-                          }}
-                        >
-                          <Pencil className="size-3.5" />
-                        </Button>
-                      </TableCell>
+                  planeTable.getRowModel().rows.map((row) => (
+                    <TableRow key={row.id}>
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id} className={tableCell}>
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
                     </TableRow>
                   ))
                 )}
               </TableBody>
             </Table>
+            </div>
+            <div className="flex items-center justify-between px-4 py-4 text-sm text-muted-foreground">
+              <span>Mostrando {planeTable.getRowModel().rows.length} de {planeTable.getFilteredRowModel().rows.length} registros</span>
+              <div className="flex items-center gap-2">
+                <span>Página {planeTable.getState().pagination.pageIndex + 1} de {Math.max(1, planeTable.getPageCount())}</span>
+                <Button variant="outline" size="sm" onClick={() => planeTable.previousPage()} disabled={!planeTable.getCanPreviousPage()} aria-label="Página anterior"><ChevronLeft className="h-4 w-4" /></Button>
+                <Button variant="outline" size="sm" onClick={() => planeTable.nextPage()} disabled={!planeTable.getCanNextPage()} aria-label="Página siguiente"><ChevronRight className="h-4 w-4" /></Button>
+              </div>
+            </div>
           </div>
         )}
         {tab === "aerolineas" && (
-          <div className="overflow-x-auto">
+          <div>
+            <div className="flex items-center justify-between gap-4 border-b border-border px-4 py-4">
+              <div className="relative max-w-sm flex-1">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar aerolínea por nombre, IATA, país..."
+                  value={globalFilterAirline}
+                  onChange={(event) => setGlobalFilterAirline(event.target.value)}
+                  className="pl-8"
+                />
+              </div>
+            </div>
+            <div className="overflow-x-auto">
             <Table className="min-w-[760px]">
               <TableHeader>
-                <TableRow>
-                  {[
-                    "Aerolínea",
-                    "IATA",
-                    "ICAO",
-                    "País",
-                    "Aeronaves",
-                    "Activa",
-                    "",
-                  ].map((head) => (
-                    <TableHead key={head}>{head}</TableHead>
-                  ))}
-                </TableRow>
+                {airlineTable.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => (
+                      <TableHead key={header.id} className="px-4 py-3 text-xs font-semibold uppercase tracking-wide">
+                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                ))}
               </TableHeader>
               <TableBody>
                 {isLoadingAirlines ? (
                   <TableRow>
                     <TableCell
-                      colSpan={7}
+                      colSpan={airlineColumns.length}
                       className="p-8 text-center text-muted-foreground"
                     >
                       Cargando aerolíneas…
                     </TableCell>
                   </TableRow>
+                ) : airlineTable.getRowModel().rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={airlineColumns.length} className="p-8 text-center text-muted-foreground">
+                      No se encontraron aerolíneas registradas
+                    </TableCell>
+                  </TableRow>
                 ) : (
-                  airlines.map((airline) => (
-                    <TableRow key={airline.id}>
-                      <TableCell className={`${tableCell} font-medium`}>
-                        {airline.nombre}
-                      </TableCell>
-                      <TableCell className={`${tableCell} font-mono`}>
-                        {airline.codigoIata}
-                      </TableCell>
-                      <TableCell className={`${tableCell} font-mono`}>
-                        {airline.codigoIcao}
-                      </TableCell>
-                      <TableCell
-                        className={`${tableCell} text-muted-foreground`}
-                      >
-                        {airline.pais}
-                      </TableCell>
-                      <TableCell className={`${tableCell} font-mono`}>
-                        {
-                          planes.filter(
-                            (plane) => plane.aerolineaId === airline.id,
-                          ).length
-                        }
-                      </TableCell>
-                      <TableCell className={tableCell}>
-                        <Switch
-                          checked={airline.activo}
-                          onCheckedChange={async (active) => {
-                            try {
-                              const updated = await updateAirline(airline.id, {
-                                ...airline,
-                                activo: active,
-                              });
-                              setAirlines((current) =>
-                                current.map((item) =>
-                                  item.id === updated.id ? updated : item,
-                                ),
-                              );
-                            } catch {
-                              setNotice(
-                                "No se pudo actualizar el estado de la aerolínea",
-                              );
-                            }
-                          }}
-                          aria-label={`Activa ${airline.nombre}`}
-                        />
-                      </TableCell>
-                      <TableCell className={`${tableCell} text-right`}>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          aria-label={`Editar ${airline.nombre}`}
-                          onClick={() => {
-                            setAirlineForm(airline);
-                            setPanel("aerolineas");
-                          }}
-                        >
-                          <Pencil className="size-3.5" />
-                        </Button>
-                      </TableCell>
+                  airlineTable.getRowModel().rows.map((row) => (
+                    <TableRow key={row.id}>
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id} className={tableCell}>
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
                     </TableRow>
                   ))
                 )}
               </TableBody>
             </Table>
+            </div>
+            <div className="flex items-center justify-between px-4 py-4 text-sm text-muted-foreground">
+              <span>Mostrando {airlineTable.getRowModel().rows.length} de {airlineTable.getFilteredRowModel().rows.length} registros</span>
+              <div className="flex items-center gap-2">
+                <span>Página {airlineTable.getState().pagination.pageIndex + 1} de {Math.max(1, airlineTable.getPageCount())}</span>
+                <Button variant="outline" size="sm" onClick={() => airlineTable.previousPage()} disabled={!airlineTable.getCanPreviousPage()} aria-label="Página anterior"><ChevronLeft className="h-4 w-4" /></Button>
+                <Button variant="outline" size="sm" onClick={() => airlineTable.nextPage()} disabled={!airlineTable.getCanNextPage()} aria-label="Página siguiente"><ChevronRight className="h-4 w-4" /></Button>
+              </div>
+            </div>
           </div>
         )}
         {tab === "mantenimiento" && (
@@ -895,14 +1230,14 @@ export default function Fleet() {
                     />
                   </Field>
                 </div>
-                <Field label="País">
-                  <Input
+                <Field
+                  label="País"
+                  hint="Los nombres de países pueden aparecer en inglés."
+                >
+                  <CountryField
                     value={airlineForm.pais ?? ""}
-                    onChange={(event) =>
-                      setAirlineForm({
-                        ...airlineForm,
-                        pais: event.target.value,
-                      })
+                    onChange={(value) =>
+                      setAirlineForm({ ...airlineForm, pais: value })
                     }
                   />
                 </Field>
