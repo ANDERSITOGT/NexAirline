@@ -1,5 +1,26 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { Pencil, Plus } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Country, City } from "country-state-city";
+import {
+  ArrowUpDown,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
+  Plus,
+  Search,
+} from "lucide-react";
+import {
+  flexRender,
+} from "@tanstack/react-table";
+import {
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  type LegacyColumnDef,
+  useLegacyTable,
+} from "@tanstack/react-table/legacy";
+import type { PaginationState, SortingState } from "@tanstack/table-core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -84,7 +105,7 @@ function Field({
   children: ReactNode;
 }) {
   return (
-    <label className={fieldClass}>
+    <div className={fieldClass}>
       <span>{label}</span>
       {children}
       {hint && (
@@ -92,7 +113,105 @@ function Field({
           {hint}
         </span>
       )}
-    </label>
+    </div>
+  );
+}
+
+type SearchableOption = { value: string; label: string };
+
+function SearchableSelect({
+  value,
+  options,
+  placeholder,
+  searchPlaceholder,
+  disabled = false,
+  onChange,
+}: {
+  value: string;
+  options: SearchableOption[];
+  placeholder: string;
+  searchPlaceholder: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const selectedOption = options.find((option) => option.value === value);
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const filteredOptions = options.filter((option) =>
+    option.label.toLocaleLowerCase().includes(normalizedSearch),
+  );
+
+  useEffect(() => {
+    if (open) searchRef.current?.focus();
+  }, [open]);
+
+  const close = () => {
+    setOpen(false);
+    setSearch("");
+  };
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        disabled={disabled}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-left text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className={selectedOption ? "text-foreground" : "text-muted-foreground"}>
+          {selectedOption?.label ?? placeholder}
+        </span>
+        <ChevronDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-10 mt-1 w-full overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md">
+          <div className="flex items-center border-b px-3">
+            <Search className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+            <Input
+              ref={searchRef}
+              value={search}
+              placeholder={searchPlaceholder}
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") close();
+                if (event.key === "Enter" && filteredOptions[0]) {
+                  onChange(filteredOptions[0].value);
+                  close();
+                }
+              }}
+              className="h-11 border-0 px-0 shadow-none focus-visible:ring-0"
+            />
+          </div>
+          <div role="listbox" className="max-h-60 overflow-y-auto p-1">
+            {filteredOptions.length === 0 ? (
+              <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                No se encontraron resultados.
+              </p>
+            ) : (
+              filteredOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="option"
+                  aria-selected={option.value === value}
+                  className="flex w-full cursor-pointer items-center rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:outline-none"
+                  onClick={() => {
+                    onChange(option.value);
+                    close();
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -153,10 +272,23 @@ export default function Infrastructure() {
   const [isLoadingGates, setIsLoadingGates] = useState(true);
   const [panel, setPanel] = useState<Tab | null>(null);
   const [airport, setAirport] = useState<AirportForm>(blankAirport);
+  const [globalFilter, setGlobalFilter] = useState("");
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: 10,
+  });
   const [terminal, setTerminal] = useState<Partial<Terminal>>({ activo: true });
   const [route, setRoute] = useState<Partial<Route>>({ activa: true });
   const [gate, setGate] = useState<Partial<Gate>>({ activo: true });
   const [notice, setNotice] = useState("");
+  const countries = Country.getAllCountries();
+  const selectedCountryIso = countries.find(
+    (country) => country.name === airport.pais
+  )?.isoCode;
+  const availableCities = selectedCountryIso
+    ? City.getCitiesOfCountry(selectedCountryIso) ?? []
+    : [];
   useEffect(() => {
     const loadCatalogs = async () => {
       try {
@@ -194,7 +326,10 @@ export default function Infrastructure() {
     panel === "aeropuertos"
       ? !!airport.nombre &&
         airport.iata.length === 3 &&
-        airport.icao.length === 4
+        airport.icao.length === 4 &&
+        !!airport.pais &&
+        !!airport.ciudad &&
+        !!airport.direccion
       : panel === "terminales"
         ? !!terminal.aeropuertoId && !!terminal.nombre
         : panel === "rutas"
@@ -323,6 +458,146 @@ export default function Infrastructure() {
     close();
   };
 
+  const airportColumns: LegacyColumnDef<Airport>[] = [
+    {
+      accessorKey: "codigoIata",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="-ml-3 h-8 px-3 text-xs font-semibold uppercase tracking-wide"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          IATA
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => <Badge>{row.original.codigoIata}</Badge>,
+    },
+    {
+      accessorKey: "nombre",
+      header: "Nombre",
+      cell: ({ row }) => (
+        <span className="font-medium">{row.original.nombre}</span>
+      ),
+    },
+    {
+      id: "ubicacion",
+      accessorFn: (row) => `${row.ciudad}, ${row.pais}`,
+      header: "Ubicación",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">
+          {row.original.ciudad}, {row.original.pais}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "codigoIcao",
+      header: "ICAO",
+      cell: ({ row }) => (
+        <span className="font-mono">{row.original.codigoIcao}</span>
+      ),
+    },
+    {
+      accessorKey: "activo",
+      header: "Activo",
+      cell: ({ row }) => {
+        const item = row.original;
+        return (
+          <Status
+            active={!!item.activo}
+            onChange={async (active) => {
+              const previousActive = !!item.activo;
+              setAirports((items) =>
+                items.map((currentItem) =>
+                  currentItem.id === item.id
+                    ? { ...currentItem, activo: active }
+                    : currentItem,
+                ),
+              );
+              try {
+                const updated = await updateAirport(item.id, {
+                  nombre: item.nombre,
+                  codigoIata: item.codigoIata,
+                  codigoIcao: item.codigoIcao,
+                  ciudad: item.ciudad,
+                  pais: item.pais,
+                  direccion: item.direccion ?? "",
+                  activo: active,
+                });
+                setAirports((items) =>
+                  items.map((currentItem) =>
+                    currentItem.id === updated.id
+                      ? {
+                          ...currentItem,
+                          ...updated,
+                          activo: updated.activo ?? active,
+                        }
+                      : currentItem,
+                  ),
+                );
+              } catch {
+                setAirports((items) =>
+                  items.map((currentItem) =>
+                    currentItem.id === item.id
+                      ? { ...currentItem, activo: previousActive }
+                      : currentItem,
+                  ),
+                );
+                setNotice("No se pudo actualizar el estado del aeropuerto");
+              }
+            }}
+            label={`Activo ${item.codigoIata}`}
+          />
+        );
+      },
+    },
+    {
+      id: "acciones",
+      header: "",
+      enableSorting: false,
+      cell: ({ row }) => {
+        const item = row.original;
+        return (
+          <div className="text-right">
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label={`Editar ${item.codigoIata}`}
+              onClick={() => {
+                setAirport({
+                  id: item.id,
+                  nombre: item.nombre,
+                  iata: item.codigoIata,
+                  icao: item.codigoIcao,
+                  ciudad: item.ciudad,
+                  pais: item.pais,
+                  direccion: item.direccion ?? "",
+                  activo: item.activo ?? true,
+                });
+                setPanel("aeropuertos");
+              }}
+            >
+              <Pencil className="size-3.5" />
+            </Button>
+          </div>
+        );
+      },
+    },
+  ];
+
+  const airportTable = useLegacyTable({
+    data: airports,
+    columns: airportColumns,
+    state: { globalFilter, sorting, pagination },
+    onGlobalFilterChange: setGlobalFilter,
+    onSortingChange: setSorting,
+    onPaginationChange: setPagination,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
@@ -382,85 +657,100 @@ export default function Infrastructure() {
           </TabsList>
           <CardContent className="overflow-x-auto p-0">
             <TabsContent value="aeropuertos" className="mt-0">
-              <CatalogTable
-                headings={["IATA", "Nombre", "Ubicación", "ICAO", "Activo", ""]}
-              >
-                {isLoadingAirports ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={6}
-                      className="p-8 text-center text-muted-foreground"
-                    >
-                      Cargando aeropuertos…
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  airports.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className={cellClass}>
-                        <Badge>{item.codigoIata}</Badge>
-                      </TableCell>
-                      <TableCell className={`${cellClass} font-medium`}>
-                        {item.nombre}
-                      </TableCell>
-                      <TableCell
-                        className={`${cellClass} text-muted-foreground`}
-                      >
-                        {item.ciudad}, {item.pais}
-                      </TableCell>
-                      <TableCell className={`${cellClass} font-mono`}>
-                        {item.codigoIcao}
-                      </TableCell>
-                      <TableCell className={cellClass}>
-                        <Status
-                          active={!!item.activo}
-                          onChange={async (active) => {
-                            try {
-                              const updated = await updateAirport(item.id, {
-                                activo: active,
-                              });
-                              setAirports((items) =>
-                                items.map((currentItem) =>
-                                  currentItem.id === updated.id
-                                    ? updated
-                                    : currentItem,
-                                ),
-                              );
-                            } catch {
-                              setNotice(
-                                "No se pudo actualizar el estado del aeropuerto",
-                              );
-                            }
-                          }}
-                          label={`Activo ${item.codigoIata}`}
-                        />
-                      </TableCell>
-                      <TableCell className={`${cellClass} text-right`}>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          aria-label={`Editar ${item.codigoIata}`}
-                          onClick={() => {
-                            setAirport({
-                              id: item.id,
-                              nombre: item.nombre,
-                              iata: item.codigoIata,
-                              icao: item.codigoIcao,
-                              ciudad: item.ciudad,
-                              pais: item.pais,
-                              direccion: item.direccion ?? "",
-                              activo: item.activo ?? true,
-                            });
-                            setPanel("aeropuertos");
-                          }}
+              <div className="flex items-center justify-between gap-4 px-4 py-4">
+                <div className="relative max-w-sm flex-1">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por nombre, IATA, ciudad..."
+                    value={globalFilter}
+                    onChange={(event) => setGlobalFilter(event.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+              </div>
+              <Table className="min-w-[700px]">
+                <TableHeader>
+                  {airportTable.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => (
+                        <TableHead
+                          key={header.id}
+                          className="px-4 py-3 text-xs font-semibold uppercase tracking-wide"
                         >
-                          <Pencil className="size-3.5" />
-                        </Button>
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext(),
+                              )}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableHeader>
+                <TableBody>
+                  {isLoadingAirports ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={airportColumns.length}
+                        className="p-8 text-center text-muted-foreground"
+                      >
+                        Cargando aeropuertos…
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </CatalogTable>
+                  ) : airportTable.getRowModel().rows.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={airportColumns.length}
+                        className="p-8 text-center text-muted-foreground"
+                      >
+                        No se encontraron aeropuertos que coincidan con la búsqueda
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    airportTable.getRowModel().rows.map((row) => (
+                      <TableRow key={row.id}>
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell key={cell.id} className={cellClass}>
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext(),
+                            )}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+              <div className="flex items-center justify-between px-4 py-4 text-sm text-muted-foreground">
+                <div>
+                  Mostrando {airportTable.getRowModel().rows.length} de {airportTable.getFilteredRowModel().rows.length} registros
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span>
+                    Página {airportTable.getState().pagination.pageIndex + 1} de {Math.max(1, airportTable.getPageCount())}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => airportTable.previousPage()}
+                    disabled={!airportTable.getCanPreviousPage()}
+                    aria-label="Página anterior"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => airportTable.nextPage()}
+                    disabled={!airportTable.getCanNextPage()}
+                    aria-label="Página siguiente"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             </TabsContent>
             <TabsContent value="terminales" className="mt-0">
               <CatalogTable
@@ -782,19 +1072,36 @@ export default function Infrastructure() {
                   </Field>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <Field label="Ciudad">
-                    <Input
-                      value={airport.ciudad}
-                      onChange={(event) =>
-                        setAirport({ ...airport, ciudad: event.target.value })
+                  <Field label="País">
+                    <SearchableSelect
+                      value={airport.pais}
+                      placeholder="Seleccione un país"
+                      searchPlaceholder="Buscar país..."
+                      options={countries.map((country) => ({
+                        value: country.name,
+                        label: country.name,
+                      }))}
+                      onChange={(value) =>
+                        setAirport((prev) => ({
+                          ...prev,
+                          pais: value,
+                          ciudad: "",
+                        }))
                       }
                     />
                   </Field>
-                  <Field label="País">
-                    <Input
-                      value={airport.pais}
-                      onChange={(event) =>
-                        setAirport({ ...airport, pais: event.target.value })
+                  <Field label="Ciudad">
+                    <SearchableSelect
+                      value={airport.ciudad}
+                      placeholder="Seleccione una ciudad"
+                      searchPlaceholder="Buscar ciudad..."
+                      options={availableCities.map((city) => ({
+                        value: city.name,
+                        label: city.name,
+                      }))}
+                      disabled={!selectedCountryIso}
+                      onChange={(value) =>
+                        setAirport((prev) => ({ ...prev, ciudad: value }))
                       }
                     />
                   </Field>
