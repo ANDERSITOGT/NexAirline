@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Lock, LockOpen, Pencil, Plus } from "lucide-react";
+import { Lock, LockOpen, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import CabinWizard from "@/components/CabinWizard";
 import {
   Card,
   CardContent,
@@ -16,7 +17,6 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet";
 import {
   Tooltip,
@@ -28,38 +28,25 @@ import { getPlanes, type Plane } from "@/services/planeService";
 import { getSeatTypes, type SeatType } from "@/services/seatTypeService";
 import {
   createSeat,
-  getSeats,
+  getSeatsByPlane,
   updateSeat,
   type CreateSeatDTO,
   type Seat,
 } from "@/services/seatService";
 
 type SeatEstado = "DISPONIBLE" | "BLOQUEADO";
-type ClassLayout = { rows: number; seatsPerRow: number };
 const statusStyle: Record<SeatEstado, string> = {
   DISPONIBLE: "border-ok/40 bg-ok-bg text-ok hover:border-ok",
   BLOQUEADO: "border-bad/30 bg-bad-bg text-bad hover:border-bad",
 };
-const typeTones = [
-  "border-primary/40 bg-primary/10 text-primary",
-  "border-ok/40 bg-ok-bg text-ok",
-  "border-warn/40 bg-warn-bg text-warn",
+const TYPE_COLORS = [
+  "border-blue-900 bg-blue-900 text-white",
+  "border-emerald-500 bg-emerald-100 text-emerald-900",
+  "border-orange-500 bg-orange-100 text-orange-900",
+  "border-purple-500 bg-purple-100 text-purple-900",
+  "border-teal-500 bg-teal-100 text-teal-900",
+  "border-rose-500 bg-rose-100 text-rose-900",
 ];
-const seatNumber = (row: number, letter: string) => `${row}${letter}`;
-const letterFor = (index: number) => String.fromCharCode(65 + index);
-
-function seatsPerRowFor(type: SeatType) {
-  const name = type.nombre.toLowerCase();
-  if (name.includes("vip") || name.includes("premium")) return 6;
-  if (
-    name.includes("media") ||
-    name.includes("regular") ||
-    name.includes("business")
-  )
-    return 10;
-  if (name.includes("pobre") || name.includes("econ")) return 12;
-  return 6;
-}
 
 export default function SeatMap() {
   const [planes, setPlanes] = useState<Plane[]>([]);
@@ -71,7 +58,6 @@ export default function SeatMap() {
   const [editingRow, setEditingRow] = useState<number | null>(null);
   const [rowTypeId, setRowTypeId] = useState(0);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [layouts, setLayouts] = useState<Record<number, ClassLayout>>({});
   const [form, setForm] = useState<CreateSeatDTO>({
     avionId: 0,
     tipoAsientoId: 0,
@@ -102,7 +88,7 @@ export default function SeatMap() {
   }, []);
   useEffect(() => {
     if (selectedPlaneId === undefined) return;
-    getSeats(selectedPlaneId)
+    getSeatsByPlane(selectedPlaneId)
       .then((loadedSeats) => {
         setSeats(loadedSeats);
         setSelectedIds([]);
@@ -118,7 +104,7 @@ export default function SeatMap() {
 
   const reloadSeats = async () => {
     if (selectedPlaneId !== undefined) {
-      setSeats(await getSeats(selectedPlaneId));
+      setSeats(await getSeatsByPlane(selectedPlaneId));
       setSelectedIds([]);
     }
   };
@@ -126,16 +112,13 @@ export default function SeatMap() {
   const typeNames = Object.fromEntries(
     seatTypes.map((type) => [type.id, type.nombre]),
   );
-  const typeTonesById = Object.fromEntries(
-    seatTypes.map((type, index) => [
-      type.id,
-      typeTones[index % typeTones.length],
-    ]),
-  );
   const rows = Array.from(new Set(seats.map((seat) => seat.fila))).sort(
     (a, b) => a - b,
   );
-  const byNumber = Object.fromEntries(seats.map((seat) => [seat.numero, seat]));
+  const seatsByRow = seats.reduce<Record<number, Seat[]>>((result, seat) => {
+    (result[seat.fila] ??= []).push(seat);
+    return result;
+  }, {});
   const selected = seats.filter((seat) => selectedIds.includes(seat.id));
   const counts = seats.reduce<Record<string, number>>((result, seat) => {
     const status = seat.activo ? "DISPONIBLE" : "BLOQUEADO";
@@ -146,26 +129,6 @@ export default function SeatMap() {
     result[seat.tipoAsientoId] = (result[seat.tipoAsientoId] ?? 0) + 1;
     return result;
   }, {});
-  const remainingCapacity = Math.max((plane?.capacidad ?? 0) - seats.length, 0);
-  const plannedTotal = Object.values(layouts).reduce(
-    (total, layout) => total + layout.rows * layout.seatsPerRow,
-    0,
-  );
-
-  const openAssign = () => {
-    setEditingSeat(null);
-    setEditingRow(null);
-    setLayouts(
-      Object.fromEntries(
-        seatTypes.map((type) => [
-          type.id,
-          { rows: 0, seatsPerRow: seatsPerRowFor(type) },
-        ]),
-      ),
-    );
-    setError("");
-    setSheetOpen(true);
-  };
   const openEdit = (seat: Seat) => {
     setEditingSeat(seat);
     setEditingRow(null);
@@ -190,66 +153,6 @@ export default function SeatMap() {
     setError("");
     setSheetOpen(true);
   };
-  const setLayoutRows = (typeId: number, rowsForType: number) => {
-    setLayouts({
-      ...layouts,
-      [typeId]: {
-        ...(layouts[typeId] ?? { seatsPerRow: 6 }),
-        rows: Math.max(0, rowsForType),
-      },
-    });
-  };
-
-  const createPlannedSeats = async () => {
-    if (
-      !selectedPlaneId ||
-      plannedTotal === 0 ||
-      plannedTotal > remainingCapacity
-    )
-      return;
-    const existing = new Set(seats.map((seat) => seat.numero));
-    const payloads: CreateSeatDTO[] = [];
-    let row = 1;
-    for (const type of seatTypes) {
-      const layout = layouts[type.id] ?? {
-        rows: 0,
-        seatsPerRow: seatsPerRowFor(type),
-      };
-      for (let classRow = 0; classRow < layout.rows; classRow += 1) {
-        for (let column = 0; column < layout.seatsPerRow; column += 1) {
-          const letra = letterFor(column);
-          const numero = seatNumber(row, letra);
-          if (!existing.has(numero))
-            payloads.push({
-              avionId: selectedPlaneId,
-              tipoAsientoId: type.id,
-              numero,
-              fila: row,
-              letra,
-            });
-          existing.add(numero);
-        }
-        row += 1;
-      }
-    }
-    setSaving(true);
-    try {
-      await Promise.all(payloads.map((payload) => createSeat(payload)));
-      await reloadSeats();
-      setSheetOpen(false);
-      setLog([`Asignados ${payloads.length} asientos`, ...log].slice(0, 3));
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "No se pudieron guardar los asientos.",
-      );
-      await reloadSeats();
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const saveSeat = async () => {
     setSaving(true);
     try {
@@ -382,27 +285,31 @@ export default function SeatMap() {
                     {plane?.nombre ?? plane?.matricula ?? "Sin aeronave"} ·{" "}
                     {plane?.capacidad ?? 0} asientos
                   </span>
+                  {plane && selectedPlaneId !== undefined && (
+                    <CabinWizard
+                      avionId={selectedPlaneId}
+                      capacidadAvion={plane.capacidad}
+                      tiposAsiento={seatTypes}
+                      hasExistingSeats={seats.length > 0}
+                      triggerLabel="Asignar"
+                      onSuccess={async () => {
+                        await reloadSeats();
+                        setLog(["Cabina actualizada", ...log].slice(0, 3));
+                      }}
+                    />
+                  )}
                   <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-                    <SheetTrigger asChild>
-                      <Button size="sm" onClick={openAssign}>
-                        <Plus className="size-4" /> Asignar
-                      </Button>
-                    </SheetTrigger>
                     <SheetContent side="right" className="w-full sm:max-w-md">
                       <SheetHeader>
                         <SheetTitle>
                           {editingRow !== null
                             ? `Editar fila ${editingRow}`
-                            : editingSeat
-                              ? "Editar asiento"
-                              : "Asignar asientos"}
+                            : "Editar asiento"}
                         </SheetTitle>
                         <SheetDescription>
                           {editingRow !== null
                             ? "Cambia la clase de todos los asientos de esta fila."
-                            : editingSeat
-                              ? "Modifica individualmente los datos de esta plaza."
-                              : "Las filas se crean con la distribución real de cada clase."}
+                            : "Modifica individualmente los datos de esta plaza."}
                         </SheetDescription>
                       </SheetHeader>
                       {editingRow !== null ? (
@@ -421,19 +328,7 @@ export default function SeatMap() {
                           saving={saving}
                           onSave={saveSeat}
                         />
-                      ) : (
-                        <AssignForm
-                          seatTypes={seatTypes}
-                          layouts={layouts}
-                          setLayoutRows={setLayoutRows}
-                          plane={plane}
-                          seatsLength={seats.length}
-                          remainingCapacity={remainingCapacity}
-                          plannedTotal={plannedTotal}
-                          saving={saving}
-                          onSave={createPlannedSeats}
-                        />
-                      )}
+                      ) : null}
                     </SheetContent>
                   </Sheet>
                 </div>
@@ -455,11 +350,11 @@ export default function SeatMap() {
                   Bloqueado{" "}
                   <span className="font-mono">{counts.BLOQUEADO ?? 0}</span>
                 </span>
-                {seatTypes.map((type, index) => (
+                {seatTypes.map((type) => (
                   <span key={type.id} className="flex items-center gap-1.5">
-                    <Badge
-                      variant="outline"
-                      className={`size-3.5 rounded-sm p-0 ${typeTones[index % typeTones.length].split(" ").slice(0, 2).join(" ")}`}
+                      <Badge
+                        variant="outline"
+                        className={`size-3.5 rounded-sm p-0 ${TYPE_COLORS[type.id % TYPE_COLORS.length].split(" ").slice(0, 2).join(" ")}`}
                     />
                     {type.nombre}{" "}
                     <span className="font-mono">
@@ -477,9 +372,8 @@ export default function SeatMap() {
               ) : (
                 <CabinGrid
                   rows={rows}
-                  byNumber={byNumber}
+                  seatsByRow={seatsByRow}
                   typeNames={typeNames}
-                  typeTones={typeTonesById}
                   selectedIds={selectedIds}
                   onSelect={setSelectedIds}
                   onEdit={openEdit}
@@ -557,84 +451,6 @@ export default function SeatMap() {
         </div>
       </div>
     </TooltipProvider>
-  );
-}
-
-function AssignForm({
-  seatTypes,
-  layouts,
-  setLayoutRows,
-  plane,
-  seatsLength,
-  remainingCapacity,
-  plannedTotal,
-  saving,
-  onSave,
-}: {
-  seatTypes: SeatType[];
-  layouts: Record<number, ClassLayout>;
-  setLayoutRows: (id: number, rows: number) => void;
-  plane?: Plane;
-  seatsLength: number;
-  remainingCapacity: number;
-  plannedTotal: number;
-  saving: boolean;
-  onSave: () => void;
-}) {
-  return (
-    <div className="mt-6 grid gap-5">
-      <div className="grid gap-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Filas por clase
-        </p>
-        {seatTypes.map((type) => (
-          <div
-            key={type.id}
-            className="grid grid-cols-[1fr_76px_112px] items-center gap-2 text-sm"
-          >
-            <span>{type.nombre}</span>
-            <Input
-              aria-label={`Filas de ${type.nombre}`}
-              type="number"
-              min={0}
-              placeholder="Filas"
-              value={layouts[type.id]?.rows ?? 0}
-              onChange={(event) =>
-                setLayoutRows(type.id, Number(event.target.value))
-              }
-            />
-            <span className="text-xs text-muted-foreground">
-              {seatsPerRowFor(type)} por fila
-            </span>
-          </div>
-        ))}
-      </div>
-      <div className="rounded-md border bg-muted/30 p-3 text-sm">
-        <p>
-          Pasillo central: <span className="font-medium">1 fijo</span>
-        </p>
-        <p>
-          Capacidad: <span className="font-mono">{plane?.capacidad ?? 0}</span>
-        </p>
-        <p>
-          Ocupados: <span className="font-mono">{seatsLength}</span>
-        </p>
-        <p>
-          Disponibles: <span className="font-mono">{remainingCapacity}</span>
-        </p>
-        <p className="mt-2 font-medium">
-          Total seleccionado: <span className="font-mono">{plannedTotal}</span>
-        </p>
-      </div>
-      <Button
-        onClick={onSave}
-        disabled={
-          saving || plannedTotal === 0 || plannedTotal > remainingCapacity
-        }
-      >
-        {saving ? "Guardando..." : `Crear ${plannedTotal} asientos`}
-      </Button>
-    </div>
   );
 }
 
@@ -745,9 +561,8 @@ function EditForm({
 
 function CabinGrid({
   rows,
-  byNumber,
+  seatsByRow,
   typeNames,
-  typeTones,
   selectedIds,
   onSelect,
   onEdit,
@@ -755,9 +570,8 @@ function CabinGrid({
   onToggle,
 }: {
   rows: number[];
-  byNumber: Record<string, Seat>;
+  seatsByRow: Record<number, Seat[]>;
   typeNames: Record<string, string>;
-  typeTones: Record<string, string>;
   selectedIds: number[];
   onSelect: (ids: number[]) => void;
   onEdit: (seat: Seat) => void;
@@ -777,17 +591,15 @@ function CabinGrid({
             <span>VENTANA</span>
           </div>
           {rows.map((row, rowIndex) => {
-            const rowSeats = Object.values(byNumber)
-              .filter((seat) => seat.fila === row)
-              .sort((a, b) => a.letra.localeCompare(b.letra));
+            const rowSeats = [...(seatsByRow[row] ?? [])].sort((a, b) =>
+              a.letra.localeCompare(b.letra),
+            );
             const split = Math.ceil(rowSeats.length / 2);
             const left = rowSeats.slice(0, split);
             const right = rowSeats.slice(split);
             const typeName =
               typeNames[String(rowSeats[0]?.tipoAsientoId)] ?? "Sin clase";
-            const previousSeats = Object.values(byNumber).filter(
-              (seat) => seat.fila === rows[rowIndex - 1],
-            );
+            const previousSeats = seatsByRow[rows[rowIndex - 1]] ?? [];
             const previousType =
               typeNames[String(previousSeats[0]?.tipoAsientoId)] ?? "";
             return (
@@ -814,7 +626,6 @@ function CabinGrid({
                         key={seat.id}
                         seat={seat}
                         typeName={typeNames[String(seat.tipoAsientoId)]}
-                        tone={typeTones[String(seat.tipoAsientoId)]}
                         selectedIds={selectedIds}
                         onSelect={onSelect}
                         onEdit={onEdit}
@@ -822,13 +633,15 @@ function CabinGrid({
                       />
                     ))}
                   </div>
-                  <button
-                    aria-label={`Editar fila ${row}`}
-                    onClick={() => onEditRow(row)}
-                    className="font-mono text-[10px] text-muted-foreground hover:text-foreground"
-                  >
-                    {row}
-                  </button>
+                  <div className="flex w-8 items-center justify-center">
+                    <button
+                      aria-label={`Editar fila ${row}`}
+                      onClick={() => onEditRow(row)}
+                      className="font-mono text-[10px] text-muted-foreground hover:text-foreground"
+                    >
+                      {row}
+                    </button>
+                  </div>
                   <div
                     className="grid gap-1"
                     style={{
@@ -840,7 +653,6 @@ function CabinGrid({
                         key={seat.id}
                         seat={seat}
                         typeName={typeNames[String(seat.tipoAsientoId)]}
-                        tone={typeTones[String(seat.tipoAsientoId)]}
                         selectedIds={selectedIds}
                         onSelect={onSelect}
                         onEdit={onEdit}
@@ -861,7 +673,6 @@ function CabinGrid({
 function SeatButton({
   seat,
   typeName,
-  tone,
   selectedIds,
   onSelect,
   onEdit,
@@ -869,7 +680,6 @@ function SeatButton({
 }: {
   seat: Seat;
   typeName?: string;
-  tone?: string;
   selectedIds: number[];
   onSelect: (ids: number[]) => void;
   onEdit: (seat: Seat) => void;
@@ -877,6 +687,7 @@ function SeatButton({
 }) {
   const status: SeatEstado = seat.activo ? "DISPONIBLE" : "BLOQUEADO";
   const isSelected = selectedIds.includes(seat.id);
+  const tone = TYPE_COLORS[seat.tipoAsientoId % TYPE_COLORS.length];
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -893,7 +704,7 @@ function SeatButton({
             );
           }}
           aria-label={`Asiento ${seat.numero} ${typeName ?? ""} ${status}`}
-          className={`flex size-7 rounded-t-md rounded-b-sm border text-[10px] font-medium transition-all hover:bg-transparent sm:size-8 ${seat.activo ? (tone ?? statusStyle[status]) : statusStyle.BLOQUEADO} ${isSelected ? "ring-2 ring-primary ring-offset-2" : ""}`}
+          className={`flex size-7 rounded-t-md rounded-b-sm border text-[10px] font-medium transition-all hover:bg-transparent sm:size-8 ${seat.activo ? tone : statusStyle.BLOQUEADO} ${isSelected ? "ring-2 ring-primary ring-offset-2" : ""}`}
         >
           {seat.numero}
         </Button>

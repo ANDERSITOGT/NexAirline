@@ -5,6 +5,7 @@ import { Login } from "@/pages/Login";
 import DashboardPage from "@/pages/dashboard/DashboardPage";
 import FlightsPage from "@/pages/flights/FlightsPage";
 import NewFlightPage from "@/pages/flights/NewFlightPage";
+import FlightPricingMap from "@/pages/vuelos/FlightPricingMap";
 import ReassignmentsPage from "@/pages/reassignments/ReassignmentsPage";
 import FleetPage from "@/pages/fleet/FleetPage";
 import SeatMapPage from "@/pages/seats/SeatMapPage";
@@ -27,6 +28,7 @@ export default function AppRouter() {
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="vuelos" element={<FlightsPage />} />
             <Route path="vuelos/nuevo" element={<NewFlightPage />} />
+            <Route path="vuelos/:vueloId/asientos" element={<FlightPricingMap />} />
             <Route path="reasignaciones" element={<ReassignmentsPage />} />
             <Route path="flota" element={<FleetPage />} />
             <Route path="asientos" element={<SeatMapPage />} />

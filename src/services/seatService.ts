@@ -27,8 +27,21 @@ export async function getSeats(avionId?: number): Promise<Seat[]> {
   return seats ?? [];
 }
 
+export async function getSeatsByPlane(avionId: number): Promise<Seat[]> {
+  const seats = await api.get<Seat[]>("/asiento?avionId=" + avionId);
+  return seats ?? [];
+}
+
 export function createSeat(data: CreateSeatDTO): Promise<Seat> {
   return api.post<Seat>("/asiento", data);
+}
+
+export function formatCabin(avionId: number): Promise<void> {
+  return api.delete<void>("/asiento/avion/" + avionId);
+}
+
+export function createCabinBulk(data: CreateSeatDTO[]): Promise<Seat[]> {
+  return api.post<Seat[]>("/asiento/bulk", data);
 }
 
 export function updateSeat(id: number, data: UpdateSeatDTO): Promise<Seat> {

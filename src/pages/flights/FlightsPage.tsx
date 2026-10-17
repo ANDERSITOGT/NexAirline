@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Pencil, Plus, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -268,6 +268,9 @@ export default function Flights() {
                       onClick={() => setDetail(flight)}
                     >
                       Ver
+                    </Button>
+                    <Button asChild variant="outline" size="sm">
+                      <Link to={`/vuelos/${flight.id}/asientos`}>Precios</Link>
                     </Button>
                   </TableCell>
                 </TableRow>
