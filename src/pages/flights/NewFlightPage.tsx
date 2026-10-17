@@ -11,17 +11,29 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { getAirlines, type Airline } from "@/services/airlineService";
 import { getAirports, type Airport } from "@/services/airportService";
 import { getPlanes, type Plane } from "@/services/planeService";
 import { getRoutes, type Route } from "@/services/routeService";
 import { getGates, type Gate } from "@/services/gateService";
+import { getTerminals, type Terminal } from "@/services/terminalService";
 import { createFlight, type CreateFlightDTO } from "@/services/flightService";
 
 const steps = ["Ruta", "Aeronave", "Puerta y horarios"];
 const capacityFilters = [0, 150, 180, 250];
-const inputClass =
-  "h-10 w-full rounded-md border border-input bg-background px-3 text-sm";
 function Field({
   label,
   hint,
@@ -53,12 +65,17 @@ export default function Wizard() {
   const [routes, setRoutes] = useState<Route[]>([]);
   const [planes, setPlanes] = useState<Plane[]>([]);
   const [gates, setGates] = useState<Gate[]>([]);
+  const [terminals, setTerminals] = useState<Terminal[]>([]);
   const [airports, setAirports] = useState<Airport[]>([]);
-  const [routeId, setRouteId] = useState<number | null>(null);
-  const [planeId, setPlaneId] = useState<number | null>(null);
+  const [airlines, setAirlines] = useState<Airline[]>([]);
+  const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
+  const [selectedPlaneId, setSelectedPlaneId] = useState<number | null>(null);
   const [minimumCapacity, setMinimumCapacity] = useState(0);
   const [flightNumber, setFlightNumber] = useState("AX 812");
-  const [gateId, setGateId] = useState<number | null>(null);
+  const [selectedGateId, setSelectedGateId] = useState<number | null>(null);
+  const [openRouteCombo, setOpenRouteCombo] = useState(false);
+  const [openPlaneCombo, setOpenPlaneCombo] = useState(false);
+  const [openGateCombo, setOpenGateCombo] = useState(false);
   const initialDate = new Date();
   initialDate.setDate(initialDate.getDate() + 1);
   const [departureDate, setDepartureDate] = useState(formatDate(initialDate));
@@ -71,17 +88,28 @@ export default function Wizard() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [loadedRoutes, loadedPlanes, loadedGates, loadedAirports] =
+        const [
+          loadedRoutes,
+          loadedPlanes,
+          loadedGates,
+          loadedAirports,
+          loadedAirlines,
+          loadedTerminals,
+        ] =
           await Promise.all([
             getRoutes(),
             getPlanes(),
             getGates(),
             getAirports(),
+            getAirlines(),
+            getTerminals(),
           ]);
         setRoutes(loadedRoutes);
         setPlanes(loadedPlanes);
         setGates(loadedGates);
         setAirports(loadedAirports);
+        setAirlines(loadedAirlines);
+        setTerminals(loadedTerminals);
       } catch {
         setNotice("No se pudieron cargar los catálogos");
       } finally {
@@ -90,8 +118,9 @@ export default function Wizard() {
     };
     void load();
   }, []);
-  const route = routes.find((item) => item.id === routeId);
-  const plane = planes.find((item) => item.id === planeId);
+  const selectedRoute = routes.find((item) => item.id === selectedRouteId);
+  const plane = planes.find((item) => item.id === selectedPlaneId);
+  const selectedGate = gates.find((item) => item.id === selectedGateId);
   const routeLabel = (item: Route) =>
     `${airports.find((airport) => airport.id === item.aeropuertoOrigenId)?.codigoIata ?? "—"} → ${airports.find((airport) => airport.id === item.aeropuertoDestinoId)?.codigoIata ?? "—"}`;
   const routeCity = (item: Route) =>
@@ -100,21 +129,27 @@ export default function Wizard() {
   const planeOptions = planes.filter(
     (item) => item.activo && item.capacidad >= minimumCapacity,
   );
+  const validGates = gates.filter((gate) => {
+    const terminal = terminals.find((item) => item.id === gate.sedeId);
+    return (
+      gate.activo && terminal?.aeropuertoId === selectedRoute?.aeropuertoOrigenId
+    );
+  });
   const timesValid =
     `${arrivalDate}T${arrivalTime}` > `${departureDate}T${departureTime}`;
   const canContinue =
     step === 0
-      ? !!routeId
+      ? !!selectedRouteId
       : step === 1
-        ? !!planeId
-        : !!gateId && timesValid && !!flightNumber.trim();
+        ? !!selectedPlaneId
+        : !!selectedGateId && timesValid && !!flightNumber.trim();
   const submit = async () => {
-    if (!route || !plane || !gateId || !timesValid) return;
+    if (!selectedRoute || !plane || !selectedGateId || !timesValid) return;
     const payload: CreateFlightDTO = {
       aerolineaId: plane.aerolineaId,
       avionId: plane.id,
-      rutaId: route.id,
-      puertaEmbarqueId: gateId,
+      rutaId: selectedRoute.id,
+      puertaEmbarqueId: selectedGateId,
       numeroVuelo: flightNumber.trim(),
       fechaSalida: new Date(`${departureDate}T${departureTime}`).toISOString(),
       fechaLlegada: new Date(`${arrivalDate}T${arrivalTime}`).toISOString(),
@@ -200,45 +235,100 @@ export default function Wizard() {
                       </p>
                     </div>
                     <Field label="Ruta (origen → destino)">
-                      <select
-                        className={inputClass}
-                        value={routeId ?? ""}
-                        onChange={(event) =>
-                          setRouteId(
-                            event.target.value
-                              ? Number(event.target.value)
-                              : null,
-                          )
-                        }
+                      <Popover
+                        open={openRouteCombo}
+                        onOpenChange={setOpenRouteCombo}
                       >
-                        <option value="">
-                          Buscar por código IATA o ciudad…
-                        </option>
-                        {routeOptions.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {routeLabel(item)} · {routeCity(item)}
-                          </option>
-                        ))}
-                      </select>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-10 w-full justify-between font-normal"
+                          >
+                            {selectedRoute ? (
+                              <span className="truncate text-left">
+                                <span className="font-semibold">
+                                  {routeLabel(selectedRoute)}
+                                </span>
+                                <span className="ml-2 text-muted-foreground">
+                                  {routeCity(selectedRoute)} · {selectedRoute.duracionEstimada} min
+                                </span>
+                              </span>
+                            ) : (
+                              "Seleccionar ruta..."
+                            )}
+                            <ArrowRight className="ml-2 size-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[400px] p-0" align="start">
+                          <Command>
+                            <CommandInput placeholder="Buscar por IATA, ciudad, país o aeropuerto..." />
+                            <CommandList>
+                              <CommandEmpty>No hay rutas disponibles.</CommandEmpty>
+                              {routeOptions.map((item) => {
+                                const origin = airports.find(
+                                  (airport) => airport.id === item.aeropuertoOrigenId,
+                                );
+                                const destination = airports.find(
+                                  (airport) => airport.id === item.aeropuertoDestinoId,
+                                );
+                                const searchValue = [
+                                  origin?.codigoIata,
+                                  origin?.ciudad,
+                                  origin?.pais,
+                                  origin?.nombre,
+                                  destination?.codigoIata,
+                                  destination?.ciudad,
+                                  destination?.pais,
+                                  destination?.nombre,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" ");
+                                return (
+                                  <CommandItem
+                                    key={item.id}
+                                    value={searchValue}
+                                    onSelect={() => {
+                                      setSelectedRouteId(item.id);
+                                      setSelectedGateId(null);
+                                      setOpenRouteCombo(false);
+                                    }}
+                                    className="items-start"
+                                  >
+                                    <div>
+                                      <div className="font-semibold">
+                                        {origin?.codigoIata ?? "—"} → {destination?.codigoIata ?? "—"}
+                                      </div>
+                                      <div className="text-xs text-muted-foreground">
+                                        {origin?.ciudad ?? "—"} a {destination?.ciudad ?? "—"} · {item.duracionEstimada} min
+                                      </div>
+                                    </div>
+                                  </CommandItem>
+                                );
+                              })}
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                     </Field>
-                    {route && (
+                    {selectedRoute && (
                       <div className="grid grid-cols-3 gap-3 rounded-lg bg-background p-4">
                         {[
                           [
                             "Origen",
                             airports.find(
                               (airport) =>
-                                airport.id === route.aeropuertoOrigenId,
+                                airport.id === selectedRoute.aeropuertoOrigenId,
                             )?.nombre ?? "—",
                           ],
                           [
                             "Destino",
                             airports.find(
                               (airport) =>
-                                airport.id === route.aeropuertoDestinoId,
+                                airport.id === selectedRoute.aeropuertoDestinoId,
                             )?.nombre ?? "—",
                           ],
-                          ["Duración est.", `${route.duracionEstimada} min`],
+                          ["Duración est.", `${selectedRoute.duracionEstimada} min`],
                         ].map(([label, value]) => (
                           <div key={label}>
                             <div className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -269,7 +359,7 @@ export default function Wizard() {
                           key={capacity}
                           onClick={() => {
                             setMinimumCapacity(capacity);
-                            setPlaneId(null);
+                            setSelectedPlaneId(null);
                           }}
                           className={`h-8 rounded-full border px-3.5 font-mono text-xs ${minimumCapacity === capacity ? "border-primary bg-primary text-white" : "border-border hover:bg-muted"}`}
                         >
@@ -278,25 +368,63 @@ export default function Wizard() {
                       ))}
                     </div>
                     <Field label="Avión">
-                      <select
-                        className={inputClass}
-                        value={planeId ?? ""}
-                        onChange={(event) =>
-                          setPlaneId(
-                            event.target.value
-                              ? Number(event.target.value)
-                              : null,
-                          )
-                        }
+                      <Popover
+                        open={openPlaneCombo}
+                        onOpenChange={setOpenPlaneCombo}
                       >
-                        <option value="">Buscar matrícula o modelo…</option>
-                        {planeOptions.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.matricula} · {item.nombre ?? ""} ·{" "}
-                            {item.capacidad} asientos
-                          </option>
-                        ))}
-                      </select>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-10 w-full justify-between font-normal"
+                          >
+                            {plane ? (
+                              <span className="truncate text-left">
+                                {plane.matricula} · {airlines.find((airline) => airline.id === plane.aerolineaId)?.nombre ?? "Aerolínea no disponible"} ({plane.capacidad} pax)
+                              </span>
+                            ) : (
+                              "Seleccionar aeronave..."
+                            )}
+                            <ArrowRight className="ml-2 size-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[400px] p-0" align="start">
+                          <Command>
+                            <CommandInput placeholder="Buscar matrícula, modelo o aerolínea..." />
+                            <CommandList>
+                              <CommandEmpty>No hay aeronaves disponibles.</CommandEmpty>
+                              {planeOptions.map((item) => {
+                                const airline = airlines.find(
+                                  (candidate) => candidate.id === item.aerolineaId,
+                                );
+                                return (
+                                  <CommandItem
+                                    key={item.id}
+                                    value={`${item.matricula} ${item.nombre ?? ""} ${airline?.nombre ?? ""}`}
+                                    onSelect={() => {
+                                      setSelectedPlaneId(item.id);
+                                      setOpenPlaneCombo(false);
+                                    }}
+                                    className="items-start"
+                                  >
+                                    <div className="flex w-full items-start justify-between gap-3">
+                                      <div>
+                                        <div className="font-semibold">
+                                          {item.matricula} · {item.nombre ?? "Aeronave"}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                          {airline?.nombre ?? "Aerolínea no disponible"}
+                                        </div>
+                                      </div>
+                                      <Badge variant="secondary">{item.capacidad} pax</Badge>
+                                    </div>
+                                  </CommandItem>
+                                );
+                              })}
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                     </Field>
                     {plane && (
                       <div className="flex items-center justify-between rounded-lg bg-background p-4">
@@ -334,26 +462,62 @@ export default function Wizard() {
                         />
                       </Field>
                       <Field label="Puerta de embarque">
-                        <select
-                          className={inputClass}
-                          value={gateId ?? ""}
-                          onChange={(event) =>
-                            setGateId(
-                              event.target.value
-                                ? Number(event.target.value)
-                                : null,
-                            )
-                          }
+                        <Popover
+                          open={openGateCombo}
+                          onOpenChange={setOpenGateCombo}
                         >
-                          <option value="">Buscar puerta…</option>
-                          {gates
-                            .filter((gate) => gate.activo)
-                            .map((gate) => (
-                              <option key={gate.id} value={gate.id}>
-                                {gate.numero}
-                              </option>
-                            ))}
-                        </select>
+                          <PopoverTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-10 w-full justify-between font-normal"
+                            >
+                              {selectedGate ? (
+                                <span className="truncate text-left">
+                                  Puerta {selectedGate.numero} · {terminals.find((terminal) => terminal.id === selectedGate.sedeId)?.nombre ?? "Terminal no disponible"}
+                                </span>
+                              ) : (
+                                "Seleccionar puerta..."
+                              )}
+                              <ArrowRight className="ml-2 size-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[400px] p-0" align="start">
+                            <Command>
+                              <CommandInput placeholder="Buscar número o terminal..." />
+                              <CommandList>
+                                <CommandEmpty>
+                                  No hay puertas disponibles en el aeropuerto de origen.
+                                </CommandEmpty>
+                                {validGates.map((gate) => {
+                                  const terminal = terminals.find(
+                                    (item) => item.id === gate.sedeId,
+                                  );
+                                  return (
+                                    <CommandItem
+                                      key={gate.id}
+                                      value={`Puerta ${gate.numero} ${terminal?.nombre ?? ""}`}
+                                      onSelect={() => {
+                                        setSelectedGateId(gate.id);
+                                        setOpenGateCombo(false);
+                                      }}
+                                      className="items-start"
+                                    >
+                                      <div>
+                                        <div className="font-semibold">
+                                          Puerta {gate.numero}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                          {terminal?.nombre ?? "Terminal no disponible"}
+                                        </div>
+                                      </div>
+                                    </CommandItem>
+                                  );
+                                })}
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                       </Field>
                       <Field label="Fecha de salida">
                         <div className="relative">
@@ -461,7 +625,10 @@ export default function Wizard() {
             <dl className="mt-4 space-y-4 text-sm">
               {[
                 ["Vuelo", flightNumber || "—"],
-                ["Ruta", route ? routeLabel(route) : "Pendiente"],
+                [
+                  "Ruta",
+                  selectedRoute ? routeLabel(selectedRoute) : "Pendiente",
+                ],
                 [
                   "Aeronave",
                   plane
@@ -470,9 +637,9 @@ export default function Wizard() {
                 ],
                 [
                   "Puerta",
-                  gateId
-                    ? (gates.find((gate) => gate.id === gateId)?.numero ??
-                      "Pendiente")
+                  selectedGateId
+                    ? (gates.find((gate) => gate.id === selectedGateId)
+                        ?.numero ?? "Pendiente")
                     : "Pendiente",
                 ],
                 ["Salida", `${departureDate} ${departureTime}`],
