@@ -1,4 +1,6 @@
-const API_PREFIX: string = import.meta.env.VITE_API_URL || "/api";
+const API_PREFIX = import.meta.env.VITE_API_URL?.trim().replace(/\/$/, "");
+
+export const isApiConfigured = Boolean(API_PREFIX);
 
 export class ApiError extends Error {
   readonly status: number;
@@ -13,9 +15,31 @@ export class ApiError extends Error {
 }
 
 const withApiPrefix = (endpoint: string) => {
+  if (!API_PREFIX) {
+    throw new Error("VITE_API_URL is not configured");
+  }
   const path = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   return path === API_PREFIX || path.startsWith(`${API_PREFIX}/`) ? path : `${API_PREFIX}${path}`;
 };
+
+export async function checkApiConnection(): Promise<boolean> {
+  if (!isApiConfigured || !API_PREFIX) return false;
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetch(withApiPrefix("/vuelo"), {
+      credentials: "same-origin",
+      signal: controller.signal,
+    });
+    return response.status < 500;
+  } catch {
+    return false;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
 
 const errorMessage = (payload: unknown, status: number, statusText: string) => {
   if (typeof payload === "string" && payload.trim()) return payload;
@@ -31,7 +55,7 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
-  const response = await fetch(withApiPrefix(endpoint), { ...options, headers, credentials: "include" });
+  const response = await fetch(withApiPrefix(endpoint), { ...options, headers, credentials: "same-origin" });
   const text = await response.text();
   let payload: unknown;
 

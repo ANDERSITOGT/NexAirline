@@ -1,4 +1,6 @@
+import { useCallback, useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BackendUnavailable } from "@/components/BackendUnavailable";
 import Shell from "@/layouts/Shell";
 import ProtectedRoute from "@/routes/ProtectedRoute";
 import { Login } from "@/pages/Login";
@@ -20,11 +22,36 @@ import SecurityPage from "@/pages/security/SecurityPage";
 import AuditPage from "@/pages/audit/AuditPage";
 import OperationsHubPage from "@/pages/operaciones/OperationsHubPage";
 import SecurityHubPage from "@/pages/seguridad/SecurityHubPage";
+import { checkApiConnection, isApiConfigured } from "@/services/api";
+
+type BackendStatus = "checking" | "available" | "unavailable";
+
+function BackendStatusGate({ children }: { children: React.ReactNode }) {
+  const [status, setStatus] = useState<BackendStatus>("checking");
+  const checkConnection = useCallback(async () => {
+    setStatus("checking");
+    const connected = isApiConfigured && (await checkApiConnection());
+    setStatus(connected ? "available" : "unavailable");
+  }, []);
+
+  useEffect(() => {
+    void checkApiConnection().then((connected) => {
+      setStatus(connected && isApiConfigured ? "available" : "unavailable");
+    });
+  }, []);
+
+  if (status !== "available") {
+    return <BackendUnavailable isChecking={status === "checking"} onRetry={() => void checkConnection()} />;
+  }
+
+  return children;
+}
 
 export default function AppRouter() {
   return (
     <BrowserRouter>
-      <Routes>
+      <BackendStatusGate>
+        <Routes>
         <Route path="/login" element={<Login />} />
 
         <Route element={<ProtectedRoute />}>
@@ -61,7 +88,8 @@ export default function AppRouter() {
         </Route>
 
         <Route path="*" element={<Navigate replace to="/" />} />
-      </Routes>
+        </Routes>
+      </BackendStatusGate>
     </BrowserRouter>
   );
 }
