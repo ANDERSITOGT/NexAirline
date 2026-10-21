@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Check, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -71,6 +71,20 @@ const formatDate = (value?: string) =>
       }).format(new Date(value))
     : "Sin fecha";
 
+const getCommercialSeatId = (seat: VueloAsiento) => seat.asientoId ?? seat.asiento_id;
+
+const mergeSeats = (physicalSeats: Seat[], commercial: VueloAsiento[]): CommercialSeat[] =>
+  physicalSeats.map((seat) => {
+    const commercialSeat = commercial.find(
+      (candidate) => getCommercialSeatId(candidate) === seat.id,
+    );
+    return {
+      ...seat,
+      precio: commercialSeat?.precio ?? null,
+      estadoComercial: commercialSeat?.estado ?? "DISPONIBLE",
+    };
+  });
+
 export default function FlightPricingMap() {
   const { vueloId } = useParams<{ vueloId: string }>();
   const parsedVueloId = Number(vueloId);
@@ -85,20 +99,7 @@ export default function FlightPricingMap() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const mergeSeats = (physicalSeats: Seat[], commercial: VueloAsiento[]) => {
-    return physicalSeats.map((seat) => {
-      const commercialSeat = commercial.find(
-        (va: any) => va.asientoId === seat.id || va.asiento_id === seat.id,
-      );
-      return {
-        ...seat,
-        precio: commercialSeat?.precio ?? null,
-        estadoComercial: commercialSeat?.estado ?? "DISPONIBLE",
-      };
-    });
-  };
-
-  const loadInventory = async () => {
+  const loadInventory = useCallback(async () => {
     if (!Number.isInteger(parsedVueloId) || parsedVueloId <= 0) {
       setError("El identificador del vuelo no es válido.");
       setLoading(false);
@@ -146,11 +147,14 @@ export default function FlightPricingMap() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [parsedVueloId]);
 
   useEffect(() => {
-    void loadInventory();
-  }, [vueloId]);
+    const timeoutId = window.setTimeout(() => {
+      void loadInventory();
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [loadInventory]);
 
   const typeNames = useMemo(
     () => new Map(seatTypes.map((type) => [type.id, type.nombre])),
@@ -224,7 +228,7 @@ export default function FlightPricingMap() {
       setCommercialSeats((current) => {
         return current.map((seat) => {
           const commercial = refreshedCommercialSeats.find(
-            (va: any) => va.asientoId === seat.id || va.asiento_id === seat.id,
+            (candidate) => getCommercialSeatId(candidate) === seat.id,
           );
           return {
             ...seat,

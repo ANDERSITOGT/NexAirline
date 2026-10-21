@@ -1,4 +1,5 @@
 const API_PREFIX = import.meta.env.VITE_API_URL?.trim().replace(/\/$/, "");
+const TOKEN_STORAGE_KEY = "nexairline_token";
 
 export const isApiConfigured = Boolean(API_PREFIX);
 
@@ -54,6 +55,8 @@ const errorMessage = (payload: unknown, status: number, statusText: string) => {
 export async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
 
   const response = await fetch(withApiPrefix(endpoint), { ...options, headers, credentials: "same-origin" });
   const text = await response.text();
@@ -67,6 +70,10 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
     }
   }
 
+  if (response.status === 401) {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    window.location.assign("/login");
+  }
   if (!response.ok) throw new ApiError(response.status, errorMessage(payload, response.status, response.statusText), payload);
   if (response.status === 204 || !text) return null as T;
 

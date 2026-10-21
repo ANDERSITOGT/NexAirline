@@ -6,6 +6,7 @@ export interface VueloAsiento {
   id?: number;
   vueloId: number;
   asientoId: number;
+  asiento_id?: number;
   precio: number | null;
   estado: VueloSeatStatus;
 }

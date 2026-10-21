@@ -4,6 +4,12 @@ import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { startSession, hasSession } from "@/lib/auth";
 import { api } from "@/services/api";
 
+interface LoginResponse {
+  access_token: string;
+  token_type: "Bearer";
+  usuario: unknown;
+}
+
 //#0b1a28 color principal azul oscuro
 //#f97015 color anaranjado fuerte
 
@@ -21,18 +27,13 @@ export const Login = () => {
       event.preventDefault();
 
       try {
-        const data = await api.post<unknown>("/login", userCredentials);
-        if (data) {
-          const user = Array.isArray(data) ? data[0] : data;
-          startSession(user);
-          setUserCredentials({
-            nombreUsuario: "",
-            password: ""
-          });
-          navigate(destination, { replace: true });
-        } else {
-          alert("las credenciales son incorrectas :,D");
-        }
+        const data = await api.post<LoginResponse>("/login", userCredentials);
+        startSession(data.access_token, data.usuario);
+        setUserCredentials({
+          nombreUsuario: "",
+          password: ""
+        });
+        navigate(destination, { replace: true });
       } catch (error) {
         console.error("Error logging in", error);
         alert("las credenciales son incorrectas");

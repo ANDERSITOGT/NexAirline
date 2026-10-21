@@ -40,11 +40,19 @@ function BackendStatusGate({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  if (status !== "available") {
-    return <BackendUnavailable isChecking={status === "checking"} onRetry={() => void checkConnection()} />;
+  if (status === "checking") {
+    return (
+      <div className="flex min-h-screen items-center justify-center" aria-label="Cargando">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
   }
 
-  return children;
+  if (status === "unavailable") {
+    return <BackendUnavailable isChecking={false} onRetry={() => void checkConnection()} />;
+  }
+
+  return <>{children}</>;
 }
 
 export default function AppRouter() {
