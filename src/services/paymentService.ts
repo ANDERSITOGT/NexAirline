@@ -58,3 +58,10 @@ export async function getPayments({
   const queryString = searchParams.toString();
   return api.get<PagosPaginadosResponse>(`/pago${queryString ? `?${queryString}` : ""}`);
 }
+
+export const updatePaymentStatus = async (
+  id: number,
+  estado: "APROBADO" | "RECHAZADO",
+): Promise<void> => {
+  await api.patch(`/pago/${id}/estado`, { estado });
+};

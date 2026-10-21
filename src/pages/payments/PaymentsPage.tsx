@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Download, Plus, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Download, Search } from "lucide-react";
 import { AppBreadcrumb } from "@/components/navigation/AppBreadcrumb";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,13 +24,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { metodosPago as seedMetodos, type MetodoPago } from "@/data3";
 import {
   getPayments,
+  updatePaymentStatus,
   type PagoItem,
   type PaymentStatus,
   type ResumenFinanciero,
 } from "@/services/paymentService";
+import {
+  getPaymentMethods,
+  togglePaymentMethod,
+  type MetodoPago,
+} from "@/services/paymentMethodService";
 
 const PAGE_SIZE = 6;
 const EMPTY_SUMMARY: ResumenFinanciero = {
@@ -91,10 +96,31 @@ function monthOptions() {
   });
 }
 
+function formatFecha(fechaStr?: string) {
+  if (!fechaStr) return "—";
+
+  const normalized = fechaStr
+    .replace(" ", "T")
+    .replace(/\.(\d{3})\d+Z$/, ".$1Z");
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return fechaStr;
+
+  return date
+    .toLocaleString("es-GT", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    })
+    .replace(",", "");
+}
+
 export default function Payments() {
   const [tab, setTab] = useState<"pagos" | "metodos">("pagos");
   const [payments, setPayments] = useState<PagoItem[]>([]);
-  const [methods, setMethods] = useState(seedMetodos);
+  const [methods, setMethods] = useState<MetodoPago[]>([]);
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [status, setStatus] = useState("TODOS");
   const [periodo, setPeriodo] = useState(() => new Date().toISOString().slice(0, 7));
@@ -105,8 +131,11 @@ export default function Payments() {
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [methodsError, setMethodsError] = useState("");
+  const [methodsLoading, setMethodsLoading] = useState(true);
+  const [updatingMethodId, setUpdatingMethodId] = useState<number | null>(null);
+  const [updatingPaymentId, setUpdatingPaymentId] = useState<number | null>(null);
   const [detail, setDetail] = useState<PagoItem | null>(null);
-  const [methodDraft, setMethodDraft] = useState<Partial<MetodoPago> | null>(null);
   const periods = useMemo(() => monthOptions(), []);
 
   useEffect(() => {
@@ -114,33 +143,80 @@ export default function Payments() {
     return () => window.clearTimeout(timeoutId);
   }, [query]);
 
+  const fetchPagos = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await getPayments({
+        page,
+        limit: PAGE_SIZE,
+        q: debouncedQuery,
+        estado: status,
+        periodo,
+      });
+      setPayments(response.data);
+      setSummary(response.resumen);
+      setTotal(response.total);
+      setTotalPages(response.total_pages);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "No se pudieron cargar los pagos.");
+    } finally {
+      setLoading(false);
+    }
+  }, [debouncedQuery, page, periodo, status]);
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      const loadPayments = async () => {
-        setLoading(true);
-        setError("");
-        try {
-          const response = await getPayments({
-            page,
-            limit: PAGE_SIZE,
-            q: debouncedQuery,
-            estado: status,
-            periodo,
-          });
-          setPayments(response.data);
-          setSummary(response.resumen);
-          setTotal(response.total);
-          setTotalPages(response.total_pages);
-        } catch (cause) {
-          setError(cause instanceof Error ? cause.message : "No se pudieron cargar los pagos.");
-        } finally {
-          setLoading(false);
-        }
-      };
-      void loadPayments();
+      void fetchPagos();
     }, 0);
     return () => window.clearTimeout(timeoutId);
-  }, [debouncedQuery, page, periodo, status]);
+  }, [fetchPagos]);
+
+  useEffect(() => {
+    const loadMethods = async () => {
+      setMethodsLoading(true);
+      setMethodsError("");
+      try {
+        setMethods(await getPaymentMethods());
+      } catch (cause) {
+        setMethodsError(
+          cause instanceof Error ? cause.message : "No se pudieron cargar los métodos de pago.",
+        );
+      } finally {
+        setMethodsLoading(false);
+      }
+    };
+    void loadMethods();
+  }, []);
+
+  const handleMethodToggle = async (method: MetodoPago) => {
+    setUpdatingMethodId(method.id);
+    setMethodsError("");
+    try {
+      const updated = await togglePaymentMethod(method.id);
+      setMethods((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+    } catch (cause) {
+      setMethodsError(
+        cause instanceof Error ? cause.message : "No se pudo actualizar el método de pago.",
+      );
+    } finally {
+      setUpdatingMethodId(null);
+    }
+  };
+
+  const handlePaymentStatus = async (payment: PagoItem, estado: "APROBADO" | "RECHAZADO") => {
+    setUpdatingPaymentId(payment.id);
+    setError("");
+    try {
+      await updatePaymentStatus(payment.id, estado);
+      setDetail(null);
+      await fetchPagos();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "No se pudo actualizar el estado del pago.");
+    } finally {
+      setUpdatingPaymentId(null);
+    }
+  };
 
   const updateFilter = (setter: (value: string) => void, value: string) => {
     setter(value);
@@ -161,11 +237,7 @@ export default function Payments() {
           <Button onClick={() => downloadPaymentsCsv(payments)}>
             <Download className="size-4" /> Exportar CSV
           </Button>
-        ) : (
-          <Button onClick={() => setMethodDraft({ activo: true })}>
-            <Plus className="size-4" /> Nuevo método
-          </Button>
-        )}
+        ) : null}
       </div>
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
         {[
@@ -250,7 +322,7 @@ export default function Payments() {
                       <TableCell className="px-4 py-3 font-mono">{money(payment.monto)}</TableCell>
                       <TableCell className="px-4 py-3"><Badge variant={paymentVariant(payment.estado)}>{payment.estado}</Badge></TableCell>
                       <TableCell className="px-4 py-3 font-mono text-xs">{payment.referencia ?? "—"}</TableCell>
-                      <TableCell className="px-4 py-3 font-mono text-xs">{payment.fecha_pago?.replace("T", " ") ?? "—"}</TableCell>
+                      <TableCell className="px-4 py-3 font-mono text-xs">{formatFecha(payment.fecha_pago)}</TableCell>
                       <TableCell className="px-4 py-3 text-muted-foreground">{payment.registrado_por}</TableCell>
                     </TableRow>
                   ))}
@@ -268,14 +340,19 @@ export default function Payments() {
         )}
         {tab === "metodos" && (
           <div className="overflow-x-auto">
+            {methodsError && <p className="border-b border-bad/30 bg-bad-bg px-4 py-3 text-sm text-bad">{methodsError}</p>}
             <Table className="min-w-[620px]">
               <TableHeader><TableRow className="bg-background"><TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wide">Método de pago</TableHead><TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wide">Activo</TableHead></TableRow></TableHeader>
-              <TableBody>{methods.map((method) => (
+              <TableBody>{methodsLoading ? (
+                <TableRow><TableCell colSpan={2} className="px-4 py-12 text-center text-muted-foreground">Cargando métodos de pago...</TableCell></TableRow>
+              ) : methods.length === 0 ? (
+                <TableRow><TableCell colSpan={2} className="px-4 py-12 text-center text-muted-foreground">Sin métodos de pago.</TableCell></TableRow>
+              ) : methods.map((method) => (
                 <TableRow key={method.id}>
                   <TableCell className="px-4 py-3 font-medium">{method.nombre}</TableCell>
                   <TableCell className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <Switch checked={method.activo} onCheckedChange={(active) => setMethods((current) => current.map((item) => item.id === method.id ? { ...item, activo: active } : item))} aria-label={`Activo ${method.nombre}`} />
+                      <Switch checked={method.activo} disabled={updatingMethodId === method.id} onCheckedChange={() => void handleMethodToggle(method)} aria-label={`Activo ${method.nombre}`} />
                       <Badge variant={method.activo ? "default" : "secondary"}>{method.activo ? "Activo" : "Inactivo"}</Badge>
                     </div>
                   </TableCell>
@@ -298,26 +375,31 @@ export default function Payments() {
                 <Badge variant={paymentVariant(detail.estado)}>{detail.estado}</Badge>
               </div>
               <dl className="divide-y divide-border text-sm">
-                {[["Método", detail.metodo_pago], ["Referencia", detail.referencia ?? "—"], ["Fecha de pago", detail.fecha_pago?.replace("T", " ") ?? "—"], ["Registrado por", detail.registrado_por]].map(([label, value]) => (
+                {[["Método", detail.metodo_pago], ["Referencia", detail.referencia ?? "—"], ["Fecha de pago", formatFecha(detail.fecha_pago)], ["Registrado por", detail.registrado_por]].map(([label, value]) => (
                   <div key={label} className="flex justify-between gap-4 py-2.5"><dt className="text-muted-foreground">{label}</dt><dd className="font-mono">{value}</dd></div>
                 ))}
               </dl>
+              {detail.estado === "PENDIENTE" && (
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="destructive"
+                    disabled={updatingPaymentId === detail.id}
+                    onClick={() => void handlePaymentStatus(detail, "RECHAZADO")}
+                  >
+                    Rechazar
+                  </Button>
+                  <Button
+                    className="bg-ok text-white hover:bg-ok/90"
+                    disabled={updatingPaymentId === detail.id}
+                    onClick={() => void handlePaymentStatus(detail, "APROBADO")}
+                  >
+                    Aprobar
+                  </Button>
+                </div>
+              )}
             </>
           )}
           <DialogFooter><Button onClick={() => setDetail(null)}>Cerrar</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={!!methodDraft} onOpenChange={(open) => !open && setMethodDraft(null)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Nuevo método de pago</DialogTitle><DialogDescription>Tabla Metodo_pago</DialogDescription></DialogHeader>
-          <div className="grid gap-4 py-2">
-            <label className="grid gap-1.5 text-sm font-medium"><span>Nombre</span><Input value={methodDraft?.nombre ?? ""} onChange={(event) => setMethodDraft({ ...methodDraft, nombre: event.target.value })} /></label>
-            <div className="flex items-center justify-between rounded-lg bg-background p-4"><div><div className="text-sm font-medium">Método activo</div><div className="text-xs text-muted-foreground">Solo los activos se ofrecen al registrar pagos.</div></div><Switch checked={!!methodDraft?.activo} onCheckedChange={(active) => setMethodDraft({ ...methodDraft, activo: active })} aria-label="Método activo" /></div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setMethodDraft(null)}>Cancelar</Button>
-            <Button disabled={!methodDraft?.nombre?.trim()} onClick={() => { setMethods((current) => [...current, { id: Date.now(), nombre: methodDraft!.nombre!.trim(), activo: !!methodDraft!.activo }]); setMethodDraft(null); }}>Guardar</Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
