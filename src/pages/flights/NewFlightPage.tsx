@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -7,6 +7,7 @@ import {
   Check,
   Clock,
   PlaneTakeoff,
+  RefreshCw,
   Search,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -20,13 +21,16 @@ import {
 } from "@/components/ui/popover";
 import { getAirlines, type Airline } from "@/services/airlineService";
 import { getAirports, type Airport } from "@/services/airportService";
-import { getPlanes, type Plane } from "@/services/planeService";
+import { getAvailablePlanes, type Plane } from "@/services/planeService";
 import { getRoutes, type Route } from "@/services/routeService";
 import { getGates, type Gate } from "@/services/gateService";
 import { getTerminals, type Terminal } from "@/services/terminalService";
 import { createFlight, type CreateFlightDTO } from "@/services/flightService";
+import { generarNumeroVuelo } from "@/lib/utils";
+import { formatearFechaGlobal } from "@/utils/dateUtils";
+import { usePreferences } from "@/contexts/usePreferences";
 
-const steps = ["Ruta", "Aeronave", "Puerta y horarios"];
+const steps = ["Ruta", "Horarios", "Aeronave y puerta"];
 const capacityFilters = [0, 150, 180, 250];
 function Field({
   label,
@@ -51,6 +55,11 @@ function Field({
 }
 function formatDate(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+}
+function formatTime(value: Date) {
+  return `${String(value.getHours()).padStart(2, "0")}:${String(
+    value.getMinutes(),
+  ).padStart(2, "0")}`;
 }
 
 function AirportPicker({
@@ -167,9 +176,10 @@ function AirportPicker({
 
 export default function Wizard() {
   const navigate = useNavigate();
+  const { timezone } = usePreferences();
   const [step, setStep] = useState(0);
   const [routes, setRoutes] = useState<Route[]>([]);
-  const [planes, setPlanes] = useState<Plane[]>([]);
+  const [availablePlanes, setAvailablePlanes] = useState<Plane[]>([]);
   const [gates, setGates] = useState<Gate[]>([]);
   const [terminals, setTerminals] = useState<Terminal[]>([]);
   const [airports, setAirports] = useState<Airport[]>([]);
@@ -179,7 +189,7 @@ export default function Wizard() {
   const [selectedDestinationAirportId, setSelectedDestinationAirportId] = useState<number | null>(null);
   const [selectedPlaneId, setSelectedPlaneId] = useState<number | null>(null);
   const [minimumCapacity, setMinimumCapacity] = useState(0);
-  const [flightNumber, setFlightNumber] = useState("AX 812");
+  const [flightNumber, setFlightNumber] = useState(() => generarNumeroVuelo());
   const [selectedGateId, setSelectedGateId] = useState<number | null>(null);
   const [openPlaneCombo, setOpenPlaneCombo] = useState(false);
   const [openGateCombo, setOpenGateCombo] = useState(false);
@@ -189,17 +199,17 @@ export default function Wizard() {
   initialDate.setDate(initialDate.getDate() + 1);
   const [departureDate, setDepartureDate] = useState(formatDate(initialDate));
   const [departureTime, setDepartureTime] = useState("09:30");
-  const [arrivalDate, setArrivalDate] = useState(formatDate(initialDate));
-  const [arrivalTime, setArrivalTime] = useState("11:30");
+  const [routeDuration, setRouteDuration] = useState<number | null>(null);
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const availabilityRequest = useRef(0);
 
   useEffect(() => {
     const load = async () => {
       try {
         const [
           loadedRoutes,
-          loadedPlanes,
           loadedGates,
           loadedAirports,
           loadedAirlines,
@@ -207,14 +217,12 @@ export default function Wizard() {
         ] =
           await Promise.all([
             getRoutes(),
-            getPlanes(),
             getGates(),
             getAirports(),
             getAirlines(),
             getTerminals(),
           ]);
         setRoutes(loadedRoutes);
-        setPlanes(loadedPlanes);
         setGates(loadedGates);
         setAirports(loadedAirports);
         setAirlines(loadedAirlines);
@@ -227,6 +235,7 @@ export default function Wizard() {
     };
     void load();
   }, []);
+  const departureISO = `${departureDate}T${departureTime}:00-06:00`;
   const selectedRoute = routes.find((item) => item.id === selectedRouteId);
   const selectedOriginAirport = airports.find(
     (airport) => airport.id === selectedOriginAirportId,
@@ -234,11 +243,11 @@ export default function Wizard() {
   const selectedDestinationAirport = airports.find(
     (airport) => airport.id === selectedDestinationAirportId,
   );
-  const plane = planes.find((item) => item.id === selectedPlaneId);
-  const selectedGate = gates.find((item) => item.id === selectedGateId);
+  const plane = availablePlanes.find((item) => item.id === selectedPlaneId);
   const routeLabel = (item: Route) =>
     `${airports.find((airport) => airport.id === item.aeropuertoOrigenId)?.codigoIata ?? "—"} → ${airports.find((airport) => airport.id === item.aeropuertoDestinoId)?.codigoIata ?? "—"}`;
-  const planeOptions = planes.filter((item) => {
+  const isPlaneSelectable = (item: Plane) => item.capacidad > 0;
+  const planeOptions = availablePlanes.filter((item) => {
     if (!item.activo || item.capacidad < minimumCapacity) return false;
     const airline = airlines.find(
       (candidate) => candidate.id === item.aerolineaId,
@@ -269,16 +278,60 @@ export default function Wizard() {
     setSelectedOriginAirportId(originId);
     setSelectedDestinationAirportId(destinationId);
     setSelectedRouteId(route?.id ?? null);
+    setRouteDuration(route?.duracionEstimada ?? null);
+    setSelectedPlaneId(null);
     setSelectedGateId(null);
   };
+  const calculatedArrival =
+    routeDuration !== null &&
+    Number.isFinite(routeDuration) &&
+    departureDate &&
+    departureTime
+      ? new Date(
+          new Date(`${departureDate}T${departureTime}:00`).getTime() +
+            routeDuration * 60_000,
+        )
+      : null;
+  const arrivalDate = calculatedArrival
+    ? formatDate(calculatedArrival)
+    : formatDate(initialDate);
+  const arrivalTime = calculatedArrival
+    ? formatTime(calculatedArrival)
+    : "11:30";
   const timesValid =
     `${arrivalDate}T${arrivalTime}` > `${departureDate}T${departureTime}`;
+  const arrivalISO = `${arrivalDate}T${arrivalTime}:00-06:00`;
   const canContinue =
     step === 0
       ? !!selectedRouteId
       : step === 1
-        ? !!selectedPlaneId
-        : !!selectedGateId && timesValid && !!flightNumber.trim();
+        ? timesValid
+        : !!selectedPlaneId && !!selectedGateId && !!flightNumber.trim();
+  const advanceStep = async () => {
+    if (step === 1) {
+      const requestId = ++availabilityRequest.current;
+      setSelectedPlaneId(null);
+      setAvailablePlanes([]);
+      setAvailabilityLoading(true);
+      setStep(2);
+      try {
+        const planes = await getAvailablePlanes(departureISO, arrivalISO);
+        if (requestId === availabilityRequest.current) {
+          setAvailablePlanes(planes);
+        }
+      } catch {
+        if (requestId === availabilityRequest.current) {
+          setNotice("No se pudieron consultar las aeronaves disponibles");
+        }
+      } finally {
+        if (requestId === availabilityRequest.current) {
+          setAvailabilityLoading(false);
+        }
+      }
+      return;
+    }
+    setStep(step + 1);
+  };
   const submit = async () => {
     if (!selectedRoute || !plane || !selectedGateId || !timesValid) return;
     const payload: CreateFlightDTO = {
@@ -287,13 +340,17 @@ export default function Wizard() {
       rutaId: selectedRoute.id,
       puertaEmbarqueId: selectedGateId,
       numeroVuelo: flightNumber.trim(),
-      fechaSalida: new Date(`${departureDate}T${departureTime}`).toISOString(),
-      fechaLlegada: new Date(`${arrivalDate}T${arrivalTime}`).toISOString(),
+      fechaSalida: new Date(
+        `${departureDate}T${departureTime}:00-06:00`,
+      ).toISOString(),
+      fechaLlegada: new Date(
+        `${arrivalDate}T${arrivalTime}:00-06:00`,
+      ).toISOString(),
       estado: "PROGRAMADO",
     };
     try {
-      await createFlight(payload);
-      navigate("/vuelos");
+      const nuevoVuelo = await createFlight(payload);
+      navigate(`/vuelos/${nuevoVuelo.id}/asientos`);
     } catch {
       setNotice("No se pudo programar el vuelo");
     }
@@ -429,15 +486,125 @@ export default function Wizard() {
                     )}
                   </div>
                 )}
-                {step === 1 && (
+                {step === 2 && (
                   <div className="space-y-5">
                     <div>
                       <h2 className="text-lg font-semibold">
                         Seleccionar aeronave
                       </h2>
                       <p className="text-sm text-muted-foreground">
-                        Filtra por capacidad mínima.
+                        Selecciona una aeronave disponible para el horario y asigna la puerta.
                       </p>
+                    </div>
+                    <div className="grid gap-5 sm:grid-cols-2">
+                      <Field label="Número de vuelo">
+                        <div className="flex gap-2">
+                          <Input
+                            className="font-mono"
+                            value={flightNumber}
+                            onChange={(event) =>
+                              setFlightNumber(event.target.value.toUpperCase())
+                            }
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            title="Generar otro código"
+                            aria-label="Generar otro código"
+                            onClick={() => {
+                              const airlineCode = plane
+                                ? airlines.find(
+                                    (airline) => airline.id === plane.aerolineaId,
+                                  )?.codigoIata
+                                : undefined;
+                              setFlightNumber(
+                                generarNumeroVuelo(airlineCode || "AX"),
+                              );
+                            }}
+                          >
+                            <RefreshCw className="size-4" />
+                          </Button>
+                        </div>
+                      </Field>
+                      <Field label="Puerta de embarque">
+                        <Popover
+                          open={openGateCombo}
+                          onOpenChange={setOpenGateCombo}
+                          modal={false}
+                        >
+                          <PopoverTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-10 w-full justify-between font-normal"
+                            >
+                              {selectedGateId ? (
+                                <span className="truncate text-left">
+                                  Puerta{" "}
+                                  {gates.find((gate) => gate.id === selectedGateId)?.numero}
+                                </span>
+                              ) : (
+                                "Seleccionar puerta..."
+                              )}
+                              <ArrowRight className="ml-2 size-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[400px] p-0" align="start">
+                            <div className="bg-popover text-popover-foreground">
+                              <div className="flex items-center border-b px-3">
+                                <Search className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                                <Input
+                                  autoFocus
+                                  value={gateSearch}
+                                  placeholder="Buscar número o terminal..."
+                                  onChange={(event) => setGateSearch(event.target.value)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Escape") setOpenGateCombo(false);
+                                    if (event.key === "Enter" && validGates[0]) {
+                                      setSelectedGateId(validGates[0].id);
+                                      setOpenGateCombo(false);
+                                    }
+                                  }}
+                                  className="h-11 border-0 px-0 shadow-none focus-visible:ring-0"
+                                />
+                              </div>
+                              <div role="listbox" className="max-h-60 overflow-y-auto p-1">
+                                {validGates.length === 0 ? (
+                                  <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                                    No hay puertas disponibles en el aeropuerto de origen.
+                                  </p>
+                                ) : (
+                                  validGates.map((gate) => (
+                                    <button
+                                      key={gate.id}
+                                      type="button"
+                                      role="option"
+                                      className="flex w-full cursor-pointer items-start rounded-sm px-2 py-2 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+                                      onClick={() => {
+                                        setSelectedGateId(gate.id);
+                                        setOpenGateCombo(false);
+                                        setGateSearch("");
+                                      }}
+                                    >
+                                      <span>
+                                        <span className="block font-semibold">
+                                          Puerta {gate.numero}
+                                        </span>
+                                        <span className="block text-xs text-muted-foreground">
+                                          {terminals.find(
+                                            (terminal) => terminal.id === gate.sedeId,
+                                          )?.nombre ?? "Terminal no disponible"}
+                                        </span>
+                                      </span>
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </Field>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {capacityFilters.map((capacity) => (
@@ -486,8 +653,18 @@ export default function Wizard() {
                                 onChange={(event) => setPlaneSearch(event.target.value)}
                                 onKeyDown={(event) => {
                                   if (event.key === "Escape") setOpenPlaneCombo(false);
-                                  if (event.key === "Enter" && planeOptions[0]) {
-                                    setSelectedPlaneId(planeOptions[0].id);
+                                  const firstSelectablePlane = planeOptions.find(
+                                    (item) => isPlaneSelectable(item),
+                                  );
+                                  if (event.key === "Enter" && firstSelectablePlane) {
+                                    setSelectedPlaneId(firstSelectablePlane.id);
+                                    const airline = airlines.find(
+                                      (candidate) =>
+                                        candidate.id === firstSelectablePlane.aerolineaId,
+                                    );
+                                    setFlightNumber(
+                                      generarNumeroVuelo(airline?.codigoIata || "AX"),
+                                    );
                                     setOpenPlaneCombo(false);
                                   }
                                 }}
@@ -495,21 +672,33 @@ export default function Wizard() {
                               />
                             </div>
                             <div role="listbox" className="max-h-60 overflow-y-auto p-1">
-                              {planeOptions.length === 0 ? (
+                              {availabilityLoading ? (
                                 <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-                                  No se encontraron aeronaves.
+                                  Consultando aeronaves disponibles…
+                                </p>
+                              ) : planeOptions.length === 0 ? (
+                                <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                                  No hay aeronaves disponibles para este horario.
                                 </p>
                               ) : (
                                 planeOptions.map((item) => {
                                   const airline = airlines.find((candidate) => candidate.id === item.aerolineaId);
+                                  const selectable = isPlaneSelectable(item);
                                   return (
                                     <button
                                       key={item.id}
                                       type="button"
                                       role="option"
-                                      className="flex w-full cursor-pointer items-start rounded-sm px-2 py-2 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+                                      disabled={!selectable}
+                                      className="flex w-full items-start rounded-sm px-2 py-2 text-left text-sm outline-none enabled:cursor-pointer enabled:hover:bg-accent enabled:hover:text-accent-foreground enabled:focus:bg-accent enabled:focus:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-60"
                                       onClick={() => {
+                                        if (!selectable) return;
                                         setSelectedPlaneId(item.id);
+                                        setFlightNumber(
+                                          generarNumeroVuelo(
+                                            airline?.codigoIata || "AX",
+                                          ),
+                                        );
                                         setOpenPlaneCombo(false);
                                         setPlaneSearch("");
                                       }}
@@ -520,10 +709,14 @@ export default function Wizard() {
                                             {item.matricula} · {item.nombre ?? "Aeronave"}
                                           </span>
                                           <span className="block text-xs text-muted-foreground">
-                                            {airline?.nombre ?? "Aerolínea no disponible"}
+                                            {selectable
+                                              ? airline?.nombre ?? "Aerolínea no disponible"
+                                              : "Sin distribución de asientos"}
                                           </span>
                                         </span>
-                                        <Badge variant="secondary">{item.capacidad} pax</Badge>
+                                        <Badge variant="secondary">
+                                          {item.capacidad} pax
+                                        </Badge>
                                       </span>
                                     </button>
                                   );
@@ -549,102 +742,17 @@ export default function Wizard() {
                     )}
                   </div>
                 )}
-                {step === 2 && (
+                {step === 1 && (
                   <div className="space-y-5">
                     <div>
                       <h2 className="text-lg font-semibold">
-                        Puerta de embarque y horarios
+                        Definir horarios
                       </h2>
                       <p className="text-sm text-muted-foreground">
-                        Configura el horario operativo del vuelo.
+                        Configura la salida; la llegada se calcula automáticamente.
                       </p>
                     </div>
                     <div className="grid gap-5 sm:grid-cols-2">
-                      <Field label="Número de vuelo">
-                        <Input
-                          className="font-mono"
-                          value={flightNumber}
-                          onChange={(event) =>
-                            setFlightNumber(event.target.value.toUpperCase())
-                          }
-                        />
-                      </Field>
-                      <Field label="Puerta de embarque">
-                        <Popover
-                          open={openGateCombo}
-                          onOpenChange={setOpenGateCombo}
-                          modal={false}
-                        >
-                          <PopoverTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="h-10 w-full justify-between font-normal"
-                            >
-                              {selectedGate ? (
-                                <span className="truncate text-left">
-                                  Puerta {selectedGate.numero} · {terminals.find((terminal) => terminal.id === selectedGate.sedeId)?.nombre ?? "Terminal no disponible"}
-                                </span>
-                              ) : (
-                                "Seleccionar puerta..."
-                              )}
-                              <ArrowRight className="ml-2 size-4 shrink-0 opacity-50" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[400px] p-0" align="start">
-                            <div className="bg-popover text-popover-foreground">
-                              <div className="flex items-center border-b px-3">
-                                <Search className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
-                                <Input
-                                  autoFocus
-                                  value={gateSearch}
-                                  placeholder="Buscar número o terminal..."
-                                  onChange={(event) => setGateSearch(event.target.value)}
-                                  onKeyDown={(event) => {
-                                    if (event.key === "Escape") setOpenGateCombo(false);
-                                    if (event.key === "Enter" && validGates[0]) {
-                                      setSelectedGateId(validGates[0].id);
-                                      setOpenGateCombo(false);
-                                    }
-                                  }}
-                                  className="h-11 border-0 px-0 shadow-none focus-visible:ring-0"
-                                />
-                              </div>
-                              <div role="listbox" className="max-h-60 overflow-y-auto p-1">
-                                {validGates.length === 0 ? (
-                                  <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-                                    No hay puertas disponibles en el aeropuerto de origen.
-                                  </p>
-                                ) : (
-                                  validGates.map((gate) => {
-                                    const terminal = terminals.find((item) => item.id === gate.sedeId);
-                                    return (
-                                      <button
-                                        key={gate.id}
-                                        type="button"
-                                        role="option"
-                                        className="flex w-full cursor-pointer items-start rounded-sm px-2 py-2 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-                                        onClick={() => {
-                                          setSelectedGateId(gate.id);
-                                          setOpenGateCombo(false);
-                                          setGateSearch("");
-                                        }}
-                                      >
-                                        <span>
-                                          <span className="block font-semibold">Puerta {gate.numero}</span>
-                                          <span className="block text-xs text-muted-foreground">
-                                            {terminal?.nombre ?? "Terminal no disponible"}
-                                          </span>
-                                        </span>
-                                      </button>
-                                    );
-                                  })
-                                )}
-                              </div>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                      </Field>
                       <Field label="Fecha de salida">
                         <div className="relative">
                           <CalendarDays className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -652,15 +760,16 @@ export default function Wizard() {
                             type="date"
                             className="pr-10 font-mono"
                             value={departureDate}
-                            onChange={(event) =>
-                              setDepartureDate(event.target.value)
-                            }
+                            onChange={(event) => {
+                              setDepartureDate(event.target.value);
+                              setSelectedPlaneId(null);
+                            }}
                           />
                         </div>
                       </Field>
                       <Field
                         label="Fecha de llegada"
-                        hint="Puede ser el día siguiente si el vuelo cruza medianoche."
+                        hint="Calculado automáticamente a partir de la duración de la ruta"
                       >
                         <div className="relative">
                           <CalendarDays className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -668,10 +777,7 @@ export default function Wizard() {
                             type="date"
                             className="pr-10 font-mono"
                             value={arrivalDate}
-                            min={departureDate}
-                            onChange={(event) =>
-                              setArrivalDate(event.target.value)
-                            }
+                            disabled
                           />
                         </div>
                       </Field>
@@ -683,9 +789,10 @@ export default function Wizard() {
                               type="time"
                               className="pr-10 font-mono"
                               value={departureTime}
-                              onChange={(event) =>
-                                setDepartureTime(event.target.value)
-                              }
+                              onChange={(event) => {
+                                setDepartureTime(event.target.value);
+                                setSelectedPlaneId(null);
+                              }}
                             />
                           </div>
                         </Field>
@@ -696,9 +803,7 @@ export default function Wizard() {
                               type="time"
                               className="pr-10 font-mono"
                               value={arrivalTime}
-                              onChange={(event) =>
-                                setArrivalTime(event.target.value)
-                              }
+                              disabled
                             />
                           </div>
                         </Field>
@@ -714,9 +819,19 @@ export default function Wizard() {
                 <div className="mt-8 flex items-center justify-between border-t border-border pt-5">
                   <Button
                     variant="ghost"
-                    onClick={() =>
-                      step === 0 ? navigate("/vuelos") : setStep(step - 1)
-                    }
+                    onClick={() => {
+                      if (step === 0) {
+                        navigate("/vuelos");
+                        return;
+                      }
+                      if (step === 2) {
+                        availabilityRequest.current += 1;
+                        setSelectedPlaneId(null);
+                        setAvailablePlanes([]);
+                        setAvailabilityLoading(false);
+                      }
+                      setStep(step - 1);
+                    }}
                   >
                     {step === 0 ? (
                       "Cancelar"
@@ -729,7 +844,7 @@ export default function Wizard() {
                   {step < 2 ? (
                     <Button
                       disabled={!canContinue}
-                      onClick={() => setStep(step + 1)}
+                      onClick={() => void advanceStep()}
                     >
                       Continuar <ArrowRight className="size-4" />
                     </Button>
@@ -768,8 +883,20 @@ export default function Wizard() {
                         ?.numero ?? "Pendiente")
                     : "Pendiente",
                 ],
-                ["Salida", `${departureDate} ${departureTime}`],
-                ["Llegada", `${arrivalDate} ${arrivalTime}`],
+                [
+                  "Salida",
+                  formatearFechaGlobal(
+                    `${departureDate}T${departureTime}:00-06:00`,
+                    timezone,
+                  ),
+                ],
+                [
+                  "Llegada",
+                  formatearFechaGlobal(
+                    `${arrivalDate}T${arrivalTime}:00-06:00`,
+                    timezone,
+                  ),
+                ],
               ].map(([label, value]) => (
                 <div
                   key={label}

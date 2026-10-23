@@ -28,7 +28,10 @@ export async function getSeats(avionId?: number): Promise<Seat[]> {
 }
 
 export async function getSeatsByPlane(avionId: number): Promise<Seat[]> {
-  const seats = await api.get<Seat[]>("/asiento?avionId=" + avionId);
+  if (!Number.isInteger(avionId) || avionId <= 0) {
+    throw new Error("El identificador del avión no es válido.");
+  }
+  const seats = await api.get<Seat[]>(`/asiento?avionId=${avionId}`);
   return seats ?? [];
 }
 

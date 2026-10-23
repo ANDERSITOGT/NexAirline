@@ -11,6 +11,36 @@ export interface VueloAsiento {
   estado: VueloSeatStatus;
 }
 
+export type DispatchSeatStatus =
+  | "DISPONIBLE"
+  | "RESERVADO"
+  | "OCUPADO"
+  | "CONFIRMADO"
+  | "CHECKED_IN"
+  | "BLOQUEADO"
+  | "RESERVADO_TEMPORAL";
+
+export interface DispatchInventorySeat {
+  id: number;
+  vueloId: number;
+  asientoId: number;
+  asiento_id?: number;
+  precio: number | null;
+  estado: DispatchSeatStatus;
+}
+
+export async function getInventario(
+  vueloId: number,
+): Promise<DispatchInventorySeat[]> {
+  if (!Number.isInteger(vueloId) || vueloId <= 0) {
+    throw new Error("El identificador del vuelo no es válido.");
+  }
+  const seats = await api.get<DispatchInventorySeat[]>(
+    `/vuelo-asiento?vueloId=${vueloId}`,
+  );
+  return seats ?? [];
+}
+
 export interface UpdateBulkPriceDTO {
   vueloId: number;
   asientoIds: number[];
@@ -21,6 +51,7 @@ export async function getVueloAsientos(vueloId: number): Promise<VueloAsiento[]>
   const seats = await api.get<VueloAsiento[]>(`/vuelo-asiento?vueloId=${vueloId}`);
   return seats ?? [];
 }
+
 
 export function updateBulkPrice(
   vueloId: number,

@@ -8,6 +8,7 @@ import DashboardPage from "@/pages/dashboard/DashboardPage";
 import FlightsPage from "@/pages/flights/FlightsPage";
 import NewFlightPage from "@/pages/flights/NewFlightPage";
 import FlightPricingMap from "@/pages/vuelos/FlightPricingMap";
+import DispatchPage from "@/pages/operations/DispatchPage";
 import ReassignmentsPage from "@/pages/reassignments/ReassignmentsPage";
 import FleetPage from "@/pages/fleet/FleetPage";
 import FleetHubPage from "@/pages/fleet/FleetHubPage";
@@ -74,6 +75,7 @@ export default function AppRouter() {
             <Route path="vuelos" element={<Navigate replace to="/operaciones/vuelos" />} />
             <Route path="vuelos/nuevo" element={<NewFlightPage />} />
             <Route path="vuelos/:vueloId/asientos" element={<FlightPricingMap />} />
+            <Route path="vuelos/:vueloId/despacho" element={<DispatchPage />} />
             <Route path="reasignaciones" element={<Navigate replace to="/operaciones/reasignaciones" />} />
             <Route path="flota" element={<FleetHubPage />} />
             <Route path="flota/aviones" element={<FleetPage />} />

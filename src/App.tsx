@@ -1,8 +1,11 @@
 import AppRouter from "@/routes/AppRouter";
+import { PreferencesProvider } from "@/contexts/PreferencesContext";
 
 function App() {
   return (
-    <AppRouter />
+    <PreferencesProvider>
+      <AppRouter />
+    </PreferencesProvider>
   );
 }
 

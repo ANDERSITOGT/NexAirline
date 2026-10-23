@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Pencil, Plus, Search } from "lucide-react";
+import {
+  CheckSquare,
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
+  Plus,
+  Search,
+} from "lucide-react";
 import { AppBreadcrumb } from "@/components/navigation/AppBreadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,12 +35,14 @@ import { getRoutes, type Route } from "@/services/routeService";
 import { getGates, type Gate } from "@/services/gateService";
 import {
   createFlight,
-  getFlights,
+  getFlightsPage,
   updateFlight,
   type CreateFlightDTO,
   type Flight,
   type FlightStatus,
 } from "@/services/flightService";
+import { usePreferences } from "@/contexts/usePreferences";
+import { formatearFechaGlobal } from "@/utils/dateUtils";
 
 const statuses: FlightStatus[] = [
   "PROGRAMADO",
@@ -50,6 +59,7 @@ type Draft = CreateFlightDTO & {
 const inputClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm";
 const localDate = (value: string) => value.slice(0, 16);
+const pageSize = 10;
 
 function statusVariant(status: FlightStatus) {
   return status === "CANCELADO"
@@ -75,6 +85,7 @@ function Field({
 
 export default function Flights() {
   const navigate = useNavigate();
+  const { timezone } = usePreferences();
   const [flights, setFlights] = useState<Flight[]>([]);
   const [airlines, setAirlines] = useState<Airline[]>([]);
   const [planes, setPlanes] = useState<Plane[]>([]);
@@ -86,19 +97,24 @@ export default function Flights() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [detail, setDetail] = useState<Flight | null>(null);
   const [notice, setNotice] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
     const load = async () => {
       try {
         const [f, a, p, r, g, ap] = await Promise.all([
-          getFlights(),
+          getFlightsPage(page, pageSize),
           getAirlines(),
           getPlanes(),
           getRoutes(),
           getGates(),
           getAirports(),
         ]);
-        setFlights(f);
+        setFlights(f.data);
+        setTotal(f.total);
+        setTotalPages(Math.max(1, f.total_pages));
         setAirlines(a);
         setPlanes(p);
         setRoutes(r);
@@ -109,7 +125,7 @@ export default function Flights() {
       }
     };
     void load();
-  }, []);
+  }, [page]);
   const routeLabel = (id: number) => {
     const route = routes.find((item) => item.id === id);
     if (!route) return "—";
@@ -125,13 +141,14 @@ export default function Flights() {
   const rows = flights.filter(
     (flight) =>
       (!filter || flight.estado === filter) &&
-      `${flight.numeroVuelo} ${routeLabel(flight.rutaId)} ${plane(flight.avionId)?.matricula ?? ""}`
+      `${flight.numeroVuelo} ${routeLabel(flight.rutaId)} ${plane(flight.avionId ?? 0)?.matricula ?? ""}`
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
   const openEdit = (flight: Flight) =>
     setDraft({
       ...flight,
+      avionId: flight.avionId ?? flight.avion_id ?? flight.avion?.id ?? 0,
       fechaSalida: localDate(flight.fechaSalida),
       fechaLlegada: localDate(flight.fechaLlegada),
     });
@@ -146,8 +163,8 @@ export default function Flights() {
     if (!draft || !valid) return;
     const payload = {
       ...draft,
-      fechaSalida: new Date(draft.fechaSalida).toISOString(),
-      fechaLlegada: new Date(draft.fechaLlegada).toISOString(),
+      fechaSalida: new Date(`${draft.fechaSalida}:00-06:00`).toISOString(),
+      fechaLlegada: new Date(`${draft.fechaLlegada}:00-06:00`).toISOString(),
     };
     try {
       const result = draft.id
@@ -166,20 +183,20 @@ export default function Flights() {
   };
 
   return (
-    <div>
+    <div className="w-full min-w-0">
       <AppBreadcrumb
         items={[{ label: "Operaciones", href: "/operaciones" }, { label: "Vuelos" }]}
       />
-      <div className="mb-6 flex items-end justify-between">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
             Vuelos
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {flights.length} vuelos registrados
+            Mostrando {rows.length} de {total} vuelos registrados
           </p>
         </div>
-        <Button onClick={() => navigate("/vuelos/nuevo")}>
+        <Button className="w-full sm:w-auto" onClick={() => navigate("/vuelos/nuevo")}>
           <Plus className="size-4" /> Programar vuelo
         </Button>
       </div>
@@ -189,18 +206,18 @@ export default function Flights() {
         </div>
       )}
       <div className="rounded-xl border border-border bg-card">
-        <div className="flex flex-wrap gap-3 border-b border-border p-4">
-          <div className="relative min-w-52 flex-1 md:max-w-xs">
+        <div className="flex flex-col gap-2 border-b border-border p-4 sm:flex-row sm:items-center">
+          <div className="relative w-full sm:max-w-xs sm:flex-1">
             <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              className="h-9 pl-9"
+              className="h-9 w-full pl-9 sm:max-w-xs"
               placeholder="Buscar vuelo, ruta o matrícula"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
           </div>
           <select
-            className={inputClass}
+            className={`${inputClass} sm:w-auto sm:max-w-xs`}
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
             aria-label="Estado"
@@ -211,8 +228,8 @@ export default function Flights() {
             ))}
           </select>
         </div>
-        <div className="overflow-x-auto">
-          <Table className="min-w-[900px]">
+        <div className="w-full overflow-x-auto rounded-md border">
+          <Table className="w-full min-w-[650px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Vuelo</TableHead>
@@ -220,6 +237,7 @@ export default function Flights() {
                 <TableHead>Aeronave</TableHead>
                 <TableHead>Ruta</TableHead>
                 <TableHead>Salida</TableHead>
+                <TableHead>Llegada</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead />
               </TableRow>
@@ -236,9 +254,9 @@ export default function Flights() {
                     )?.nombre ?? "—"}
                   </TableCell>
                   <TableCell>
-                    {plane(flight.avionId)?.matricula ?? "—"}
+                    {plane(flight.avionId ?? 0)?.matricula ?? "—"}
                     <span className="block text-xs text-muted-foreground">
-                      {plane(flight.avionId)?.nombre}
+                      {plane(flight.avionId ?? 0)?.nombre}
                     </span>
                   </TableCell>
                   <TableCell>
@@ -250,7 +268,10 @@ export default function Flights() {
                     </span>
                   </TableCell>
                   <TableCell className="font-mono text-xs">
-                    {localDate(flight.fechaSalida).replace("T", " ")}
+                    {formatearFechaGlobal(flight.fechaSalida, timezone)}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {formatearFechaGlobal(flight.fechaLlegada, timezone)}
                   </TableCell>
                   <TableCell>
                     <Badge variant={statusVariant(flight.estado)}>
@@ -276,13 +297,18 @@ export default function Flights() {
                     <Button asChild variant="outline" size="sm">
                       <Link to={`/vuelos/${flight.id}/asientos`}>Precios</Link>
                     </Button>
+                    <Button asChild variant="outline" size="sm">
+                      <Link to={`/vuelos/${flight.id}/despacho`}>
+                        <CheckSquare className="size-4" /> Despacho
+                      </Link>
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
               {rows.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="p-10 text-center text-muted-foreground"
                   >
                     Sin vuelos.
@@ -291,6 +317,31 @@ export default function Flights() {
               )}
             </TableBody>
           </Table>
+        </div>
+        <div className="flex flex-col gap-3 border-t border-border px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-muted-foreground">
+            Página {page} de {totalPages}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page === 1}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+            >
+              <ChevronLeft className="size-4" /> Anterior
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page === totalPages}
+              onClick={() =>
+                setPage((current) => Math.min(totalPages, current + 1))
+              }
+            >
+              Siguiente <ChevronRight className="size-4" />
+            </Button>
+          </div>
         </div>
       </div>
       <Dialog open={!!detail} onOpenChange={(open) => !open && setDetail(null)}>
