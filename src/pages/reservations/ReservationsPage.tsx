@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Ban, ChevronRight, Loader2, Pencil, Search } from "lucide-react";
 import { AppBreadcrumb } from "@/components/navigation/AppBreadcrumb";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
@@ -197,10 +198,12 @@ function PassengerDetail({
 
 export default function Reservations() {
   const { timezone } = usePreferences();
+  const [searchParams] = useSearchParams();
+  const queryParam = searchParams.get("q");
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [open, setOpen] = useState<number | null>(null);
   const [status, setStatus] = useState("");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => queryParam ?? "");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [cancellingId, setCancellingId] = useState<number | null>(null);
@@ -213,6 +216,13 @@ export default function Reservations() {
     numero_documento: "",
   });
   const [isUpdating, setIsUpdating] = useState(false);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setQuery(queryParam ?? "");
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [queryParam]);
 
   const loadReservations = async () => {
     setLoading(true);
@@ -230,6 +240,22 @@ export default function Reservations() {
     const timeoutId = window.setTimeout(() => void loadReservations(), 0);
     return () => window.clearTimeout(timeoutId);
   }, []);
+
+  useEffect(() => {
+    if (!queryParam || reservations.length === 0) return;
+    const timeoutId = window.setTimeout(() => {
+      const normalizedQuery = queryParam.trim().toLocaleLowerCase();
+      const exactMatch = reservations.find((reservation) => {
+        const ticketValues = reservationDetails(reservation).flatMap((detail) =>
+          (detail.boletos ?? []).flatMap((ticket) => [ticket.numero_boleto, ticket.numero]),
+        );
+        return [reservationPnr(reservation), ...ticketValues]
+          .some((value) => value != null && String(value).trim().toLocaleLowerCase() === normalizedQuery);
+      });
+      if (exactMatch) setOpen(exactMatch.id);
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [queryParam, reservations]);
 
   const handleEditPassenger = (detail: ReservationDetail) => {
     setPasajeroAEditar(detail);

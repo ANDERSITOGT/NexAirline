@@ -3,6 +3,19 @@ import { Command as CommandPrimitive } from "cmdk"
 import { Search } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+
+const CommandDialog = ({
+  children,
+  ...props
+}: React.ComponentPropsWithoutRef<typeof Dialog>) => (
+  <Dialog {...props}>
+    <DialogContent className="overflow-hidden p-0 shadow-lg sm:max-w-xl">
+      <DialogTitle className="sr-only">Búsqueda global</DialogTitle>
+      <Command shouldFilter={false}>{children}</Command>
+    </DialogContent>
+  </Dialog>
+)
 
 const Command = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive>,
@@ -89,6 +102,7 @@ CommandItem.displayName = CommandPrimitive.Item.displayName
 
 export {
   Command,
+  CommandDialog,
   CommandEmpty,
   CommandGroup,
   CommandInput,

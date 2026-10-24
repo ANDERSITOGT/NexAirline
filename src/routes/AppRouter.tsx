@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { BackendUnavailable } from "@/components/BackendUnavailable";
 import Shell from "@/layouts/Shell";
 import ProtectedRoute from "@/routes/ProtectedRoute";
@@ -24,8 +24,13 @@ import AuditPage from "@/pages/audit/AuditPage";
 import OperationsHubPage from "@/pages/operaciones/OperationsHubPage";
 import SecurityHubPage from "@/pages/seguridad/SecurityHubPage";
 import { checkApiConnection, isApiConfigured } from "@/services/api";
+import { isAdministrator } from "@/lib/auth";
 
 type BackendStatus = "checking" | "available" | "unavailable";
+
+function AdministratorRoute() {
+  return isAdministrator() ? <Outlet /> : <Navigate replace to="/dashboard" />;
+}
 
 function BackendStatusGate({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<BackendStatus>("checking");
@@ -90,9 +95,11 @@ export default function AppRouter() {
             <Route path="reservas" element={<Navigate replace to="/ventas/reservas" />} />
             <Route path="pagos" element={<Navigate replace to="/ventas/pagos" />} />
             <Route path="seguridad" element={<SecurityHubPage />} />
-            <Route path="seguridad/roles" element={<SecurityPage />} />
+            <Route element={<AdministratorRoute />}>
+              <Route path="seguridad/roles" element={<SecurityPage />} />
+              <Route path="roles" element={<Navigate replace to="/seguridad/roles" />} />
+            </Route>
             <Route path="seguridad/bitacora" element={<AuditPage />} />
-            <Route path="roles" element={<Navigate replace to="/seguridad/roles" />} />
             <Route path="bitacora" element={<Navigate replace to="/seguridad/bitacora" />} />
           </Route>
         </Route>
