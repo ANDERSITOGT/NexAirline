@@ -1,4 +1,5 @@
-const API_PREFIX = import.meta.env.VITE_API_URL?.trim().replace(/\/$/, "");
+const RAW_API_URL = import.meta.env.VITE_API_URL || "https://fly.astracode.org/api";
+const API_PREFIX = RAW_API_URL.trim().replace(/\/$/, "");
 const TOKEN_STORAGE_KEY = "nexairline_token";
 
 export const isApiConfigured = Boolean(API_PREFIX);
