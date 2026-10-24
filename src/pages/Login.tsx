@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, Lock, Plane, Satellite, Settings, Shield, User } from "lucide-react";
+import { Eye, EyeOff, Lock, Plane, Satellite, Shield, User } from "lucide-react";
 import { startSession, hasSession } from "@/lib/auth";
 import { api } from "@/services/api";
 
