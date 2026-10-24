@@ -83,12 +83,10 @@ const getStringProperty = (value: unknown, key: string) => {
 function Logo() {
   return (
     <Link to="/dashboard" className="flex items-center gap-2.5">
-      <div className="flex size-8 items-center justify-center rounded-md bg-accent text-white">
+      <div className="flex size-8 items-center justify-center rounded-2xl bg-accent text-white">
         <Plane className="size-4 -rotate-45" />
       </div>
-      <span className="text-[17px] font-bold tracking-tight">
-        airl<span className="text-accent">Nex</span>
-      </span>
+      <span className="text-[16px] font-extrabold tracking-tight">AstraCode Air</span>
     </Link>
   );
 }
@@ -188,8 +186,8 @@ export default function Shell() {
   const page = pageFromPath(pathname);
   const activeId = page === "nuevo" ? "vuelos" : page;
   const crumbs = page === "nuevo"
-    ? ["airlNex", groupOf(page), "Vuelos", "Programar vuelo"]
-    : ["airlNex", groupOf(page), labelOf(page)];
+    ? ["AstraCode Air", groupOf(page), "Vuelos", "Programar vuelo"]
+    : ["AstraCode Air", groupOf(page), labelOf(page)];
   const handleLogout = () => {
     endSession();
     navigate("/login", { replace: true });

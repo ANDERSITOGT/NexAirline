@@ -2,7 +2,7 @@ import { reservas, totalOf } from "./data2";
 
 export interface Aerolinea { id: number; nombre: string; iata: string; icao: string; pais: string; activo: boolean }
 export const aerolineas: Aerolinea[] = [
-  { id: 1, nombre: "airlNex", iata: "AX", icao: "ANX", pais: "Guatemala", activo: true },
+  { id: 1, nombre: "AstraCode Air", iata: "AX", icao: "ANX", pais: "Guatemala", activo: true },
   { id: 2, nombre: "AirBridge Regional", iata: "AB", icao: "ABR", pais: "Panamá", activo: true },
   { id: 3, nombre: "Pacífico Charter", iata: "PC", icao: "PCH", pais: "Costa Rica", activo: false },
 ];

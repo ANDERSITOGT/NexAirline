@@ -23,7 +23,7 @@ export function AppBreadcrumb({ items }: AppBreadcrumbProps) {
       <BreadcrumbList>
         <BreadcrumbItem>
           <BreadcrumbLink asChild>
-            <Link to="/">airINex</Link>
+            <Link to="/">AstraCode Air</Link>
           </BreadcrumbLink>
         </BreadcrumbItem>
         {items.map((item, index) => {

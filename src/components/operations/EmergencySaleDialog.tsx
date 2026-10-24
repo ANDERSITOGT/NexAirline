@@ -331,7 +331,7 @@ export function EmergencySaleDialog({
           </style>
         </head>
         <body>
-          <h1>airINex · Pase de Abordar y Comprobante</h1>
+          <h1>AstraCode Air · Pase de Abordar y Comprobante</h1>
           <div class="label">Pasajero</div><div class="value">${escapeHtml(passengerName)}</div>
           <div class="label">Vuelo</div><div class="value">${escapeHtml(flightNumber)}</div>
           <div class="label">Asiento</div><div class="value">${escapeHtml(seatLabel)}</div>
@@ -568,7 +568,7 @@ export function EmergencySaleDialog({
               <p className="mt-1 text-sm">El pasajero puede presentarse en mostrador para check-in o usar su código de reserva.</p>
             </div>
             <div className="rounded-xl border bg-card p-5 shadow-sm">
-              <h3 className="text-lg font-bold">airINex · Pase de Abordar y Comprobante</h3>
+              <h3 className="text-lg font-bold">AstraCode Air · Pase de Abordar y Comprobante</h3>
               <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
                 <div><dt className="text-muted-foreground">Pasajero</dt><dd className="font-medium">{capitalizeName(`${passenger.nombre} ${passenger.apellido}`)}</dd></div>
                 <div><dt className="text-muted-foreground">Vuelo</dt><dd className="font-medium">{flightNumber}</dd></div>

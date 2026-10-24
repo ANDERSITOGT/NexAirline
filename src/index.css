@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+	html, body {
+		font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+	}
+}
+
 :root {
 	--background: 210 40% 98%;
 	--foreground: 210 57% 10%;
@@ -23,7 +29,6 @@
 	--input: 214 32% 91%;
 	--ring: 24 95% 53%;
 	--radius: 0.5rem;
-	font-family: system-ui, -apple-system, sans-serif;
 	color: #14222b;
 	background: #f8fafc;
 	font-synthesis: none;
@@ -54,7 +59,7 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; }
+body { @apply min-w-0 font-sans antialiased text-slate-800; margin: 0; min-width: 320px; }
 button, a { font: inherit; }
 button { cursor: pointer; }
 

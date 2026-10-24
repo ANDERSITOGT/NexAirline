@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppBreadcrumb } from "@/components/navigation/AppBreadcrumb";
-import { ArrowUpRight, DollarSign, Plane, PlaneTakeoff, Ticket, Wrench } from "lucide-react";
+import { ArrowUpRight, DollarSign, Plane, PlaneTakeoff, Users, Wrench } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -27,46 +27,34 @@ const EMPTY_SUMMARY: DashboardSummary = {
 function Kpi({
   label,
   value,
-  delta,
+  context,
   icon: Icon,
-  accent,
-  iconTone,
   href,
-  children,
 }: {
   label: string;
   value: string;
-  delta: React.ReactNode;
+  context: string;
   icon: LucideIcon;
-  accent: string;
-  iconTone: string;
   href: string;
-  children: React.ReactNode;
 }) {
   return (
-    <Link to={href} className="block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-      <Card className={`h-full rounded-xl border-t-4 shadow-sm transition-shadow hover:shadow-md ${accent}`}>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">{label}</span>
-          <span className={`flex size-9 items-center justify-center rounded-xl ${iconTone}`}>
-            <Icon className="size-4.5" />
-          </span>
-        </div>
-        <div className="mt-2 flex items-end justify-between gap-3">
-          <div className="font-mono text-2xl font-bold tracking-tight">{value}</div>
-          <span className="text-muted-foreground" aria-hidden="true"><ArrowUpRight className="size-4" /></span>
-        </div>
-        <div className="mt-2 text-xs text-muted-foreground">{delta}</div>
-        {children}
-      </CardContent>
-    </Card>
+    <Link to={href} className="block h-full rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+      <Card className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm dark:border-slate-800 dark:bg-card">
+        <CardContent className="p-0">
+          <div className="flex items-center justify-between pb-2">
+            <span className="text-sm font-medium tracking-tight text-slate-500">{label}</span>
+            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-900 text-white shadow-sm">
+              <Icon className="size-4" aria-hidden="true" />
+            </span>
+          </div>
+          <div className="mt-2 block min-h-9 text-3xl font-bold leading-none tracking-tight !text-slate-900 tabular-nums">
+            {value || "0"}
+          </div>
+          <p className="mt-1 text-xs text-slate-500">{context}</p>
+        </CardContent>
+      </Card>
     </Link>
   );
-}
-
-function SoftBadge({ children, className }: { children: React.ReactNode; className: string }) {
-  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${className}`}>{children}</span>;
 }
 
 function FlightBadge({ value }: { value: DashboardFlight["estado"] }) {
@@ -167,20 +155,44 @@ export default function Dashboard() {
       </div>
 
       {error && <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi href="/vuelos" label="Vuelos activos" value={loading ? "—" : String(summary.vuelos_activos)} delta={<span className="flex flex-wrap gap-1"><SoftBadge className="bg-sky-100 text-sky-700">{summary.vuelos_abordando} abordando</SoftBadge><SoftBadge className="bg-sky-100 text-sky-700">{summary.vuelos_en_ruta} en ruta</SoftBadge></span>} icon={PlaneTakeoff} accent="border-sky-500" iconTone="bg-sky-500/10 text-sky-600"><span /></Kpi>
-        <Kpi href="/ventas/reservas" label="Pasajeros del día" value={loading ? "—" : summary.pasajeros_hoy.toLocaleString("es-GT")} delta={<SoftBadge className="bg-orange-100 text-orange-700">{summary.reservas_hoy} reservas hoy</SoftBadge>} icon={Ticket} accent="border-orange-500" iconTone="bg-orange-500/10 text-orange-600"><span /></Kpi>
-        <Kpi href="/flota/aviones" label="Flota operativa / mantenimiento" value={loading ? "—" : String(Math.max(summary.total_aviones - summary.aviones_mantenimiento, 0))} delta={<span className="block"><SoftBadge className="bg-amber-100 text-amber-800">{summary.mantenimiento_alertas} aeronaves en taller</SoftBadge><span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-amber-100"><span className="block h-full rounded-full bg-amber-500" style={{ width: `${summary.total_aviones ? Math.max(0, Math.min(100, ((summary.total_aviones - summary.aviones_mantenimiento) / summary.total_aviones) * 100)) : 0}%` }} /></span></span>} icon={Wrench} accent="border-amber-500" iconTone="bg-amber-500/10 text-amber-600"><span /></Kpi>
-        <Kpi href="/ventas/pagos" label="Recaudación aprobada" value={loading ? "—" : `$${money}`} delta={<SoftBadge className="bg-emerald-100 text-emerald-700">Conciliado</SoftBadge>} icon={DollarSign} accent="border-emerald-500" iconTone="bg-emerald-500/10 text-emerald-600"><span /></Kpi>
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Kpi
+          href="/vuelos"
+          label="Vuelos activos"
+          value={loading ? "—" : String(summary.vuelos_activos ?? 0)}
+          context={`${summary.vuelos_abordando ?? 0} abordando · ${summary.vuelos_en_ruta ?? 0} en ruta`}
+          icon={PlaneTakeoff}
+        />
+        <Kpi
+          href="/ventas/reservas"
+          label="Pasajeros del día"
+          value={loading ? "—" : (summary.pasajeros_hoy ?? 0).toLocaleString("es-GT")}
+          context={`${summary.reservas_hoy ?? 0} reservas confirmadas hoy`}
+          icon={Users}
+        />
+        <Kpi
+          href="/flota/aviones"
+          label="Flota operativa"
+          value={loading ? "—" : String(Math.max((summary.total_aviones ?? 0) - (summary.aviones_mantenimiento ?? 0), 0))}
+          context="Aeronaves en estado nominal"
+          icon={Wrench}
+        />
+        <Kpi
+          href="/ventas/pagos"
+          label="Recaudación conciliada"
+          value={loading ? "—" : `$${money}`}
+          context="Total conciliado en pasarela"
+          icon={DollarSign}
+        />
       </div>
 
-      <section className="mt-6 overflow-hidden rounded-xl border border-border bg-card">
-        <header className="flex items-center justify-between border-b border-border px-5 py-4">
+      <section className="mt-6 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-slate-800/80 dark:bg-card">
+        <header className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800/80">
           <div><h2 className="font-semibold">Próximas salidas</h2><p className="text-sm text-muted-foreground">Ordenadas por hora de salida</p></div>
           <Button variant="ghost" onClick={() => navigate("/vuelos")}>Ver todos <ArrowUpRight className="size-4" /></Button>
         </header>
         <Table className="hidden md:table">
-          <TableHeader><TableRow className="text-left text-xs uppercase tracking-wide text-muted-foreground">{["Vuelo", "Ruta", "Aeronave", "Salida", "Puerta", "Estado"].map((heading) => <TableHead key={heading} className="px-5 py-3 font-semibold">{heading}</TableHead>)}</TableRow></TableHeader>
+          <TableHeader><TableRow className="bg-slate-50/75 text-left text-xs uppercase tracking-wider text-slate-400">{["Vuelo", "Ruta", "Aeronave", "Salida", "Puerta", "Estado"].map((heading) => <TableHead key={heading} className="px-4 py-3.5 font-semibold">{heading}</TableHead>)}</TableRow></TableHeader>
           <TableBody>{upcoming.length === 0 ? <TableRow><TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">No hay salidas programadas para las próximas horas.</TableCell></TableRow> : upcoming.map((flight, index) => <TableRow key={flight.id ?? `flight-${index}`} onClick={() => flight.id && navigate(`/vuelos/${flight.id}/despacho`)} className="cursor-pointer transition-colors hover:bg-orange-500/5"><TableCell className="px-5 py-3 font-mono font-medium">{flight.numero_vuelo ?? "—"}</TableCell><TableCell className="px-5 py-3 font-mono font-semibold text-foreground">{flight.origen_iata ?? "???"} <span className="text-orange-500">➔</span> {flight.destino_iata ?? "???"}</TableCell><TableCell className="px-5 py-3 text-muted-foreground">{flight.matricula ?? "Sin asignar"}</TableCell><TableCell className="px-5 py-3 font-mono">{formatTime(flight.fecha_salida, timezone)}</TableCell><TableCell className="px-5 py-3 font-mono">{flight.puerta ?? "—"}</TableCell><TableCell className="px-5 py-3"><FlightBadge value={flight.estado} /></TableCell></TableRow>)}</TableBody>
         </Table>
         <ul className="divide-y divide-border md:hidden">{upcoming.map((flight, index) => <li key={flight.id ?? `flight-${index}`} onClick={() => flight.id && navigate(`/vuelos/${flight.id}/despacho`)} className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-orange-500/5"><div><div className="font-mono text-sm font-semibold">{flight.numero_vuelo ?? "—"} · {flight.origen_iata ?? "???"} <span className="text-orange-500">➔</span> {flight.destino_iata ?? "???"}</div><div className="mt-0.5 text-xs text-muted-foreground">{formatTime(flight.fecha_salida, timezone)} · Puerta {flight.puerta ?? "—"} · {flight.matricula ?? "Sin asignar"}</div></div><FlightBadge value={flight.estado} /></li>)}</ul>

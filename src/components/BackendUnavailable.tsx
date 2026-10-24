@@ -17,7 +17,7 @@ export function BackendUnavailable({ isChecking, onRetry }: BackendUnavailablePr
           </span>
         </div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-accent">
-          airlNex
+          AstraCode Air
         </p>
         <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
           Estamos realizando mantenimiento

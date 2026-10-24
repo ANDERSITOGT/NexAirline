@@ -1,6 +1,6 @@
-# NexAirline
+# AstraCode Air
 
-NexAirline es una interfaz de reserva de vuelos construida con React, TypeScript y Vite. Incluye búsqueda de rutas, selección de tipo de viaje, filtros de cabina y selección interactiva de vuelos.
+AstraCode Air es un centro de control aeroportuario construido con React, TypeScript y Vite. Incluye gestión de operaciones, vuelos, flota, reservas y pagos.
 
 ## Integraciones realizadas
 
