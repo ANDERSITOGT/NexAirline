@@ -30,12 +30,11 @@ import {
   type ReservationStatus,
   type UpdatePassengerData,
 } from "@/services/reservationService";
+import { usePreferences } from "@/contexts/usePreferences";
+import { formatDateTime } from "@/utils/dateUtils";
 
 const money = (value: number) =>
   `$${value.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
-
-const when = (iso?: string | null) =>
-  iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)} ${iso.slice(11, 16)}` : "—";
 
 const reservationDates = (reservation: Reservation) => ({
   created: reservation.fecha_creacion ?? reservation.creada,
@@ -94,6 +93,7 @@ function PassengerDetail({
   onEditPassenger: (detail: ReservationDetail) => void;
   isCancelling: boolean;
 }) {
+  const { timezone } = usePreferences();
   const total = reservationTotal(reservation);
   const dates = reservationDates(reservation);
   return (
@@ -188,7 +188,7 @@ function PassengerDetail({
       </dl>
       {dates.created && (
         <p className="text-xs text-muted-foreground">
-          Creada: {when(dates.created)}{dates.expires ? ` · Expira: ${when(dates.expires)}` : ""}
+          Creada: {formatDateTime(dates.created, timezone)}{dates.expires ? ` · Expira: ${formatDateTime(dates.expires, timezone)}` : ""}
         </p>
       )}
     </div>
@@ -196,6 +196,7 @@ function PassengerDetail({
 }
 
 export default function Reservations() {
+  const { timezone } = usePreferences();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [open, setOpen] = useState<number | null>(null);
   const [status, setStatus] = useState("");
@@ -385,8 +386,8 @@ export default function Reservations() {
                             <TableCell className="px-3 py-3">
                               <Badge variant={reservationVariant(reservation.estado)}>{reservation.estado}</Badge>
                             </TableCell>
-                            <TableCell className="px-3 py-3 font-mono text-muted-foreground">{when(dates.created)}</TableCell>
-                            <TableCell className="px-3 py-3 font-mono text-muted-foreground">{when(dates.expires)}</TableCell>
+                            <TableCell className="px-3 py-3 font-mono text-muted-foreground">{formatDateTime(dates.created, timezone)}</TableCell>
+                            <TableCell className="px-3 py-3 font-mono text-muted-foreground">{formatDateTime(dates.expires, timezone)}</TableCell>
                             <TableCell className="px-3 py-3 font-mono">{reservationDetails(reservation).length}</TableCell>
                             <TableCell className="px-4 py-3 text-right font-mono font-medium">{money(reservationTotal(reservation))}</TableCell>
                           </TableRow>

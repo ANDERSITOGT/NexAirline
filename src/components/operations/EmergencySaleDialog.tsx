@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { KeyboardEvent } from "react";
 import { Loader2, Search } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -28,10 +29,15 @@ type PassengerForm = { nombre: string; apellido: string; tipo_documento: string;
 
 const emptyCustomer: CustomerForm = { nombre: "", apellido: "", correo: "", telefono: "" };
 const emptyPassenger: PassengerForm = { nombre: "", apellido: "", tipo_documento: "", numero_documento: "" };
+const capitalizeName = (value: string) => value
+  .trim()
+  .toLowerCase()
+  .replace(/\b\p{L}/gu, (letter) => letter.toUpperCase());
 
 export function EmergencySaleDialog({
   open,
   vueloId,
+  flightNumber,
   seatId,
   seatLabel,
   seatClass,
@@ -43,6 +49,7 @@ export function EmergencySaleDialog({
 }: {
   open: boolean;
   vueloId: number;
+  flightNumber: string;
   seatId: number;
   seatLabel: string;
   seatClass: string;
@@ -250,9 +257,27 @@ export function EmergencySaleDialog({
     }
   };
 
+  const documentNumber = passenger.numero_documento.trim();
   const canNext = step === 1
     ? Boolean(selectedCustomer)
-    : Boolean(passenger.nombre.trim() && passenger.apellido.trim() && passenger.tipo_documento.trim() && passenger.numero_documento.trim());
+    : Boolean(
+      passenger.nombre.trim()
+      && passenger.apellido.trim()
+      && passenger.tipo_documento.trim()
+      && (
+        passenger.tipo_documento === "DPI"
+          ? /^\d{8,13}$/.test(documentNumber)
+          : passenger.tipo_documento === "DNI"
+            ? /^\d{1,10}$/.test(documentNumber)
+            : /^[A-Z0-9]{1,12}$/.test(documentNumber)
+      ),
+    );
+  const handleStepKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Enter" && canNext && step < 3) {
+      event.preventDefault();
+      setStep((current) => current + 1);
+    }
+  };
   const selectedMethod = paymentMethods.find((method) => String(method.id) === paymentMethodId);
   const selectedMethodName = selectedMethod?.nombre.toLowerCase() ?? "";
   const isCardPayment = selectedMethodName.includes("tarjeta")
@@ -289,7 +314,7 @@ export function EmergencySaleDialog({
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
-    const passengerName = `${passenger.nombre.trim()} ${passenger.apellido.trim()}`.trim();
+    const passengerName = capitalizeName(`${passenger.nombre.trim()} ${passenger.apellido.trim()}`);
     printWindow.document.write(`
       <!doctype html>
       <html lang="es">
@@ -308,7 +333,7 @@ export function EmergencySaleDialog({
         <body>
           <h1>airINex · Pase de Abordar y Comprobante</h1>
           <div class="label">Pasajero</div><div class="value">${escapeHtml(passengerName)}</div>
-          <div class="label">Vuelo</div><div class="value">${escapeHtml(String(vueloId))}</div>
+          <div class="label">Vuelo</div><div class="value">${escapeHtml(flightNumber)}</div>
           <div class="label">Asiento</div><div class="value">${escapeHtml(seatLabel)}</div>
           <div class="label">Clase</div><div class="value">—</div>
           <div class="label">Número de boleto</div><div class="value">${escapeHtml(ticketNumber)}</div>
@@ -340,8 +365,20 @@ export function EmergencySaleDialog({
               : "Boleto emitido correctamente"}
           </DialogDescription>
         </DialogHeader>
+        {step < 4 && (
+          <div className="flex items-center gap-2" aria-label={`Paso ${step} de 3`}>
+            {[1, 2, 3].map((progressStep) => (
+              <span
+                key={progressStep}
+                className={`h-1 flex-1 rounded-full transition-all duration-300 ${
+                  progressStep <= step ? "bg-primary" : "bg-muted"
+                }`}
+              />
+            ))}
+          </div>
+        )}
         {step === 1 && (
-          <div className="space-y-3">
+          <div className="space-y-3" onKeyDown={handleStepKeyDown}>
             <h3 className="font-semibold">Cliente</h3>
             {!newCustomer && !selectedCustomer && (
               <div className="relative">
@@ -396,7 +433,16 @@ export function EmergencySaleDialog({
                 <Input placeholder="Nombre" value={customer.nombre} onChange={(event) => setCustomer({ ...customer, nombre: event.target.value })} />
                 <Input placeholder="Apellido" value={customer.apellido} onChange={(event) => setCustomer({ ...customer, apellido: event.target.value })} />
                 <Input type="email" placeholder="Correo" value={customer.correo} onChange={(event) => setCustomer({ ...customer, correo: event.target.value })} />
-                <Input placeholder="Teléfono" value={customer.telefono} onChange={(event) => setCustomer({ ...customer, telefono: event.target.value })} />
+                <Input
+                  inputMode="numeric"
+                  maxLength={12}
+                  placeholder="Ej: 55551234"
+                  value={customer.telefono}
+                  onChange={(event) => setCustomer({
+                    ...customer,
+                    telefono: event.target.value.replace(/\D/g, "").slice(0, 12),
+                  })}
+                />
                 <div className="space-y-2 sm:col-span-2">
                   {customerError && <p role="alert" className="text-xs text-red-600">{customerError}</p>}
                   <Button type="button" onClick={() => void saveNewCustomer()} disabled={savingCustomer}>
@@ -408,7 +454,7 @@ export function EmergencySaleDialog({
           </div>
         )}
         {step === 2 && (
-          <div className="space-y-3">
+          <div className="space-y-3" onKeyDown={handleStepKeyDown}>
             <h3 className="font-semibold">Pasajero</h3>
             <label className="flex items-center gap-2 text-sm"><Checkbox checked={sameCustomer} onCheckedChange={updateSameCustomer} /> El pasajero es el mismo cliente</label>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -426,7 +472,21 @@ export function EmergencySaleDialog({
                 <option value="CEDULA">Cédula de Identidad / Extranjería</option>
                 <option value="LICENCIA">Licencia de Conducir</option>
               </select>
-              <Input placeholder="Número de documento" value={passenger.numero_documento} onChange={(event) => setPassenger({ ...passenger, numero_documento: event.target.value })} />
+              <Input
+                inputMode={passenger.tipo_documento === "DPI" || passenger.tipo_documento === "DNI" ? "numeric" : "text"}
+                maxLength={passenger.tipo_documento === "DPI" ? 13 : passenger.tipo_documento === "DNI" ? 10 : 12}
+                placeholder="Número de documento"
+                value={passenger.numero_documento}
+                onChange={(event) => {
+                  const value = passenger.tipo_documento === "DPI" || passenger.tipo_documento === "DNI"
+                    ? event.target.value.replace(/\D/g, "")
+                    : event.target.value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+                  setPassenger({
+                    ...passenger,
+                    numero_documento: value.slice(0, passenger.tipo_documento === "DPI" ? 13 : passenger.tipo_documento === "DNI" ? 10 : 12),
+                  });
+                }}
+              />
             </div>
           </div>
         )}
@@ -510,11 +570,11 @@ export function EmergencySaleDialog({
             <div className="rounded-xl border bg-card p-5 shadow-sm">
               <h3 className="text-lg font-bold">airINex · Pase de Abordar y Comprobante</h3>
               <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-                <div><dt className="text-muted-foreground">Pasajero</dt><dd className="font-medium">{passenger.nombre} {passenger.apellido}</dd></div>
-                <div><dt className="text-muted-foreground">Vuelo</dt><dd className="font-medium">{vueloId}</dd></div>
+                <div><dt className="text-muted-foreground">Pasajero</dt><dd className="font-medium">{capitalizeName(`${passenger.nombre} ${passenger.apellido}`)}</dd></div>
+                <div><dt className="text-muted-foreground">Vuelo</dt><dd className="font-medium">{flightNumber}</dd></div>
                 <div><dt className="text-muted-foreground">Asiento</dt><dd className="font-medium">{seatLabel}</dd></div>
                 <div><dt className="text-muted-foreground">Clase</dt><dd className="font-medium">{seatClass}</dd></div>
-                <div><dt className="text-muted-foreground">Número de boleto</dt><dd className="font-mono font-medium">{ticketNumber}</dd></div>
+                <div><dt className="text-muted-foreground">Número de boleto</dt><dd className="break-all font-mono text-xs font-semibold tracking-tight text-foreground">{ticketNumber}</dd></div>
                 <div><dt className="text-muted-foreground">Código de check-in</dt><dd className="font-mono font-medium">{checkInCode}</dd></div>
                 <div className="col-span-2 border-t pt-3"><dt className="text-muted-foreground">Total pagado</dt><dd className="text-lg font-bold">USD {price.toFixed(2)}</dd></div>
               </dl>

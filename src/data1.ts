@@ -99,6 +99,8 @@ export const routeLabel = (id: number) => {
 export const planeById = (id: number) => planes.find((p) => p.id === id)!;
 
 export const fmtDuration = (m: number) => `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
-export const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("es-GT", { day: "2-digit", month: "short" }).replace(".", "");
-export const fmtTime = (iso: string) => iso.slice(11, 16);
+export const fmtDate = (iso: string, timeZone = "America/Guatemala") =>
+  formatDate(iso, timeZone);
+export const fmtTime = (iso: string, timeZone = "America/Guatemala") =>
+  formatTime(iso, timeZone);
+import { formatDate, formatTime } from "@/utils/dateUtils";

@@ -32,17 +32,13 @@ import {
   ejecutarReasignacionIndividual,
   ejecutarReasignacionMasiva,
 } from "@/services/reasignacionService";
+import { usePreferences } from "@/contexts/usePreferences";
+import { formatDateTime } from "@/utils/dateUtils";
 
 type Notice = { kind: "success" | "error"; message: string };
 type FlightOption = Flight & { passengers?: number; availableSeats?: number };
 type MassiveStep = 1 | 2 | 3;
 const massiveSteps = ["Vuelo cancelado", "Vuelos alternativos", "Resumen"];
-
-const dateFormatter = new Intl.DateTimeFormat("es-MX", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "UTC",
-});
 
 function flightNumber(flight: Flight) {
   return flight.numeroVuelo || `Vuelo ${flight.id}`;
@@ -52,14 +48,8 @@ function flightDeparture(flight: Flight) {
   return flight.fechaSalida;
 }
 
-function formatUtc(value: string | undefined) {
-  if (!value) return "Fecha no disponible";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : `${dateFormatter.format(date)} UTC`;
-}
-
-function flightLabel(flight: Flight) {
-  return `${flightNumber(flight)} · ${formatUtc(flightDeparture(flight))}`;
+function flightLabel(flight: Flight, timezone: string) {
+  return `${flightNumber(flight)} · ${formatDateTime(flightDeparture(flight), timezone)}`;
 }
 
 function findDetail(reservation: Reservation) {
@@ -95,6 +85,7 @@ function NoticeMessage({ notice }: { notice: Notice }) {
 }
 
 function FlightSummary({ flight }: { flight: Flight }) {
+  const { timezone } = usePreferences();
   return (
     <div className="rounded-lg border bg-background p-3">
       <div className="flex items-center justify-between gap-3">
@@ -102,7 +93,7 @@ function FlightSummary({ flight }: { flight: Flight }) {
         <Badge variant={flight.estado === "CANCELADO" ? "destructive" : "secondary"}>{flight.estado}</Badge>
       </div>
       <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Clock3 className="size-3.5" /> {formatUtc(flightDeparture(flight))}
+        <Clock3 className="size-3.5" /> {formatDateTime(flightDeparture(flight), timezone)}
       </p>
     </div>
   );
@@ -117,11 +108,12 @@ function CancelledFlightPicker({
   value: number | null;
   onChange: (flight: FlightOption) => void;
 }) {
+  const { timezone } = usePreferences();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const selectedFlight = flights.find((flight) => flight.id === value);
   const filteredFlights = flights.filter((flight) =>
-    `${flightNumber(flight)} ${flight.rutaId} ${flightDeparture(flight)} ${formatUtc(flightDeparture(flight))}`
+    `${flightNumber(flight)} ${flight.rutaId} ${flightDeparture(flight)} ${formatDateTime(flightDeparture(flight), timezone)}`
       .toLocaleLowerCase()
       .includes(search.toLocaleLowerCase()),
   );
@@ -146,7 +138,7 @@ function CancelledFlightPicker({
             <span className="truncate">
               <span className="font-semibold">{flightNumber(selectedFlight)}</span>
               <span className="ml-2 text-muted-foreground">
-                Ruta {selectedFlight.rutaId} · {formatUtc(flightDeparture(selectedFlight))}
+                Ruta {selectedFlight.rutaId} · {formatDateTime(flightDeparture(selectedFlight), timezone)}
               </span>
             </span>
           ) : (
@@ -181,7 +173,7 @@ function CancelledFlightPicker({
                 <Check className={`mr-2 size-4 shrink-0 ${flight.id === value ? "opacity-100" : "opacity-0"}`} />
                 <span className="min-w-0">
                   <span className="block font-semibold">{flightNumber(flight)}</span>
-                  <span className="block text-xs text-muted-foreground">Ruta {flight.rutaId} · {formatUtc(flightDeparture(flight))}</span>
+                  <span className="block text-xs text-muted-foreground">Ruta {flight.rutaId} ·                   {formatDateTime(flightDeparture(flight), timezone)}</span>
                 </span>
                 <Badge className="ml-auto" variant="destructive">CANCELADO</Badge>
               </button>
@@ -194,6 +186,7 @@ function CancelledFlightPicker({
 }
 
 export default function ReassignmentsPage() {
+  const { timezone } = usePreferences();
   const [flights, setFlights] = useState<FlightOption[]>([]);
   const [cancelledFlights, setCancelledFlights] = useState<FlightOption[]>([]);
   const [alternativeFlights, setAlternativeFlights] = useState<FlightOption[]>([]);
@@ -400,7 +393,7 @@ export default function ReassignmentsPage() {
                       {alternativesLoading ? <div className="flex items-center justify-center p-8 text-sm text-muted-foreground"><Loader2 className="mr-2 size-4 animate-spin" /> Cargando vuelos alternativos...</div> : alternativeFlights.map((flight) => (
                         <label key={flight.id} className="flex cursor-pointer items-center gap-3 rounded-lg border p-4 hover:bg-muted/50">
                           <Checkbox checked={selectedDestinationIds.includes(flight.id)} onCheckedChange={(checked) => toggleDestination(flight.id, checked === true)} />
-                          <span className="flex-1"><span className="block font-mono font-semibold">{flightNumber(flight)}</span><span className="text-xs text-muted-foreground">{formatUtc(flightDeparture(flight))} · Ruta {flight.rutaId}</span></span>
+                          <span className="flex-1"><span className="block font-mono font-semibold">{flightNumber(flight)}</span><span className="text-xs text-muted-foreground">{formatDateTime(flightDeparture(flight), timezone)} · Ruta {flight.rutaId}</span></span>
                           <span className="text-right text-sm"><span className="block font-medium">{flight.availableSeats ?? flight.asientosDisponibles ?? flight.capacidad ?? 0}</span><span className="text-xs text-muted-foreground">asientos</span></span>
                         </label>
                       ))}
@@ -494,7 +487,7 @@ export default function ReassignmentsPage() {
                           <span className="w-6 text-center text-sm font-medium text-muted-foreground">{index + 1}</span>
                           <Select value={segment} onValueChange={(value) => setSegments((current) => current.map((item, itemIndex) => itemIndex === index ? value : item))}>
                             <SelectTrigger aria-label={`Vuelo del tramo ${index + 1}`}><SelectValue placeholder={`Selecciona el vuelo ${index === 0 ? "A" : String.fromCharCode(65 + index)}`} /></SelectTrigger>
-                            <SelectContent>{flights.filter((flight) => flight.estado !== "CANCELADO" && flight.estado !== "FINALIZADO").map((flight) => <SelectItem key={flight.id} value={String(flight.id)}>{flightLabel(flight)}</SelectItem>)}</SelectContent>
+                            <SelectContent>{flights.filter((flight) => flight.estado !== "CANCELADO" && flight.estado !== "FINALIZADO").map((flight) => <SelectItem key={flight.id} value={String(flight.id)}>{flightLabel(flight, timezone)}</SelectItem>)}</SelectContent>
                           </Select>
                           {segments.length > 1 && <Button aria-label={`Eliminar tramo ${index + 1}`} size="icon" variant="ghost" onClick={() => setSegments((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="size-4 text-muted-foreground" /></Button>}
                         </div>

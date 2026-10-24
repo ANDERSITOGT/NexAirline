@@ -6,9 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { flights, fmtTime, planeById, planes, routeLabel, type Flight } from "@/data1";
+import { flights, planeById, planes, routeLabel, type Flight } from "@/data1";
 import { reservas } from "@/data2";
 import { mantenimientos } from "@/data3";
+import { usePreferences } from "@/contexts/usePreferences";
+import { formatDateTime, formatTime } from "@/utils/dateUtils";
 
 function Kpi({ label, value, delta, icon: Icon, tone }: { label: string; value: string; delta: string; icon: typeof Ticket; tone: string }) {
   return (
@@ -34,6 +36,7 @@ function FlightBadge({ value }: { value: string }) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { timezone } = usePreferences();
   const flightList: Flight[] = flights;
   const dashboardDate = "2026-10-15";
   const active = flightList.filter((flight) => flight.estado === "EN_VUELO" || flight.estado === "ABORDANDO").length;
@@ -52,7 +55,7 @@ export default function Dashboard() {
       />
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Jueves 15 oct 2026 · 13:42 GMT-6</p>
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">{formatDateTime("2026-10-15T13:42", timezone)} · {timezone}</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">Operaciones de hoy</h1>
         </div>
         <Button onClick={() => navigate("/vuelos/nuevo")}><PlaneTakeoff className="size-4" /> Programar vuelo</Button>
@@ -72,10 +75,10 @@ export default function Dashboard() {
 
         <Table className="hidden md:table">
           <TableHeader><TableRow className="text-left text-xs uppercase tracking-wide text-muted-foreground">{["Vuelo", "Ruta", "Aeronave", "Salida", "Puerta", "Estado"].map((heading) => <TableHead key={heading} className="px-5 py-3 font-semibold">{heading}</TableHead>)}</TableRow></TableHeader>
-          <TableBody>{upcoming.map((flight) => <TableRow key={flight.id} className="hover:bg-background"><TableCell className="px-5 py-3 font-mono font-medium">{flight.numero}</TableCell><TableCell className="px-5 py-3 font-mono">{routeLabel(flight.ruta)}</TableCell><TableCell className="px-5 py-3 text-muted-foreground">{planeById(flight.avion).matricula}</TableCell><TableCell className="px-5 py-3 font-mono">{fmtTime(flight.salida)}</TableCell><TableCell className="px-5 py-3 font-mono">{flight.puerta ?? <span className="text-muted-foreground">—</span>}</TableCell><TableCell className="px-5 py-3"><FlightBadge value={flight.estado} /></TableCell></TableRow>)}</TableBody>
+          <TableBody>{upcoming.map((flight) => <TableRow key={flight.id} className="hover:bg-background"><TableCell className="px-5 py-3 font-mono font-medium">{flight.numero}</TableCell><TableCell className="px-5 py-3 font-mono">{routeLabel(flight.ruta)}</TableCell><TableCell className="px-5 py-3 text-muted-foreground">{planeById(flight.avion).matricula}</TableCell><TableCell className="px-5 py-3 font-mono">{formatTime(flight.salida, timezone)}</TableCell><TableCell className="px-5 py-3 font-mono">{flight.puerta ?? <span className="text-muted-foreground">—</span>}</TableCell><TableCell className="px-5 py-3"><FlightBadge value={flight.estado} /></TableCell></TableRow>)}</TableBody>
         </Table>
 
-        <ul className="divide-y divide-border md:hidden">{upcoming.map((flight) => <li key={flight.id} className="flex items-center justify-between gap-3 px-4 py-3"><div><div className="font-mono text-sm font-medium">{flight.numero} · {routeLabel(flight.ruta)}</div><div className="mt-0.5 text-xs text-muted-foreground">{fmtTime(flight.salida)} · Puerta {flight.puerta ?? "—"} · {planeById(flight.avion).matricula}</div></div><FlightBadge value={flight.estado} /></li>)}</ul>
+        <ul className="divide-y divide-border md:hidden">{upcoming.map((flight) => <li key={flight.id} className="flex items-center justify-between gap-3 px-4 py-3"><div><div className="font-mono text-sm font-medium">{flight.numero} · {routeLabel(flight.ruta)}</div><div className="mt-0.5 text-xs text-muted-foreground">{formatTime(flight.salida, timezone)} · Puerta {flight.puerta ?? "—"} · {planeById(flight.avion).matricula}</div></div><FlightBadge value={flight.estado} /></li>)}</ul>
         {upcoming.length === 0 && <div className="px-5 py-10 text-center text-sm text-muted-foreground">No hay salidas programadas para hoy.</div>}
       </section>
     </div>

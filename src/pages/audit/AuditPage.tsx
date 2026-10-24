@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/table";
 import { usuarios } from "@/data2";
 import { bitacora, type Bitacora } from "@/data3";
+import { usePreferences } from "@/contexts/usePreferences";
+import { formatDateTime } from "@/utils/dateUtils";
 
 const states = [
   "DISPONIBLE",
@@ -37,6 +39,7 @@ const csvValue = (value: string | number) =>
 function downloadCsv(
   rows: Bitacora[],
   userName: (id: number | null) => string,
+  timezone: string,
 ) {
   const values = [
     [
@@ -51,7 +54,7 @@ function downloadCsv(
     ],
     ...rows.map((entry) => [
       entry.id,
-      entry.fecha,
+      formatDateTime(entry.fecha, timezone),
       entry.vuelo,
       entry.asiento,
       entry.anterior ?? "",
@@ -72,6 +75,7 @@ function downloadCsv(
 }
 
 export default function Audit() {
+  const { timezone } = usePreferences();
   const [query, setQuery] = useState("");
   const [newState, setNewState] = useState("");
   const [userFilter, setUserFilter] = useState("");
@@ -110,7 +114,7 @@ export default function Audit() {
             Historial de cambios de estado en Vuelo_asiento.
           </p>
         </div>
-        <Button onClick={() => downloadCsv(filteredRows, userName)}>
+        <Button onClick={() => downloadCsv(filteredRows, userName, timezone)}>
           <Download className="size-4" /> Exportar CSV
         </Button>
       </div>
@@ -180,7 +184,7 @@ export default function Audit() {
                       {entry.id}
                     </TableCell>
                     <TableCell className="px-4 py-3 font-mono text-xs">
-                      {entry.fecha}
+                      {formatDateTime(entry.fecha, timezone)}
                     </TableCell>
                     <TableCell className="px-4 py-3 font-mono font-medium">
                       {entry.vuelo} · {entry.asiento}

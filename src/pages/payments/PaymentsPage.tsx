@@ -36,6 +36,8 @@ import {
   togglePaymentMethod,
   type MetodoPago,
 } from "@/services/paymentMethodService";
+import { formatDateTime } from "@/utils/dateUtils";
+import { usePreferences } from "@/contexts/usePreferences";
 
 const PAGE_SIZE = 6;
 const EMPTY_SUMMARY: ResumenFinanciero = {
@@ -60,7 +62,7 @@ const paymentVariant = (status: PaymentStatus): BadgeProps["variant"] =>
 const csvValue = (value: string | number) =>
   `"${String(value).replaceAll('"', '""')}"`;
 
-function downloadPaymentsCsv(rows: PagoItem[]) {
+function downloadPaymentsCsv(rows: PagoItem[], timezone: string) {
   const values = [
     ["id", "reserva", "cliente", "metodo", "monto", "estado", "referencia", "fecha", "registrado_por"],
     ...rows.map((payment) => [
@@ -71,7 +73,7 @@ function downloadPaymentsCsv(rows: PagoItem[]) {
       payment.monto,
       payment.estado,
       payment.referencia ?? "",
-      payment.fecha_pago ?? "",
+      formatDateTime(payment.fecha_pago, timezone),
       payment.registrado_por,
     ]),
   ];
@@ -84,46 +86,26 @@ function downloadPaymentsCsv(rows: PagoItem[]) {
   URL.revokeObjectURL(url);
 }
 
-function monthOptions() {
-  const formatter = new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric" });
+function monthOptions(timezone: string) {
+  const formatter = new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric", timeZone: timezone });
   const current = new Date();
   return Array.from({ length: 12 }, (_, index) => {
     const date = new Date(current.getFullYear(), current.getMonth() - index, 1);
     return {
-      value: date.toISOString().slice(0, 7),
+      value: new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", timeZone: timezone }).format(date),
       label: formatter.format(date).replace(/^\w/, (letter) => letter.toUpperCase()),
     };
   });
 }
 
-function formatFecha(fechaStr?: string) {
-  if (!fechaStr) return "—";
-
-  const normalized = fechaStr
-    .replace(" ", "T")
-    .replace(/\.(\d{3})\d+Z$/, ".$1Z");
-  const date = new Date(normalized);
-  if (Number.isNaN(date.getTime())) return fechaStr;
-
-  return date
-    .toLocaleString("es-GT", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    })
-    .replace(",", "");
-}
-
 export default function Payments() {
+  const { timezone } = usePreferences();
   const [tab, setTab] = useState<"pagos" | "metodos">("pagos");
   const [payments, setPayments] = useState<PagoItem[]>([]);
   const [methods, setMethods] = useState<MetodoPago[]>([]);
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [status, setStatus] = useState("TODOS");
-  const [periodo, setPeriodo] = useState(() => new Date().toISOString().slice(0, 7));
+  const [periodo, setPeriodo] = useState(() => new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit" }).format(new Date()));
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -136,7 +118,7 @@ export default function Payments() {
   const [updatingMethodId, setUpdatingMethodId] = useState<number | null>(null);
   const [updatingPaymentId, setUpdatingPaymentId] = useState<number | null>(null);
   const [detail, setDetail] = useState<PagoItem | null>(null);
-  const periods = useMemo(() => monthOptions(), []);
+  const periods = useMemo(() => monthOptions(timezone), [timezone]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => setDebouncedQuery(query), 400);
@@ -234,7 +216,7 @@ export default function Payments() {
           </p>
         </div>
         {tab === "pagos" ? (
-          <Button onClick={() => downloadPaymentsCsv(payments)}>
+          <Button onClick={() => downloadPaymentsCsv(payments, timezone)}>
             <Download className="size-4" /> Exportar CSV
           </Button>
         ) : null}
@@ -322,7 +304,7 @@ export default function Payments() {
                       <TableCell className="px-4 py-3 font-mono">{money(payment.monto)}</TableCell>
                       <TableCell className="px-4 py-3"><Badge variant={paymentVariant(payment.estado)}>{payment.estado}</Badge></TableCell>
                       <TableCell className="px-4 py-3 font-mono text-xs">{payment.referencia ?? "—"}</TableCell>
-                      <TableCell className="px-4 py-3 font-mono text-xs">{formatFecha(payment.fecha_pago)}</TableCell>
+                      <TableCell className="px-4 py-3 font-mono text-xs">{formatDateTime(payment.fecha_pago, timezone)}</TableCell>
                       <TableCell className="px-4 py-3 text-muted-foreground">{payment.registrado_por}</TableCell>
                     </TableRow>
                   ))}
@@ -375,7 +357,7 @@ export default function Payments() {
                 <Badge variant={paymentVariant(detail.estado)}>{detail.estado}</Badge>
               </div>
               <dl className="divide-y divide-border text-sm">
-                {[["Método", detail.metodo_pago], ["Referencia", detail.referencia ?? "—"], ["Fecha de pago", formatFecha(detail.fecha_pago)], ["Registrado por", detail.registrado_por]].map(([label, value]) => (
+                {                [["Método", detail.metodo_pago], ["Referencia", detail.referencia ?? "—"], ["Fecha de pago", formatDateTime(detail.fecha_pago, timezone)], ["Registrado por", detail.registrado_por]].map(([label, value]) => (
                   <div key={label} className="flex justify-between gap-4 py-2.5"><dt className="text-muted-foreground">{label}</dt><dd className="font-mono">{value}</dd></div>
                 ))}
               </dl>

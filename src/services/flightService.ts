@@ -6,10 +6,17 @@ export interface Flight {
   aerolineaId: number;
   avionId?: number;
   avion_id?: number;
-  avion?: { id: number };
+  avion?: { id: number; matricula?: string | null };
   rutaId: number;
+  ruta?: {
+    aeropuerto_origen?: { ciudad?: string | null; codigo_iata?: string | null };
+    aeropuerto_destino?: { ciudad?: string | null; codigo_iata?: string | null };
+  } | null;
+  aeropuerto_origen?: { ciudad?: string | null; codigo_iata?: string | null } | null;
+  aeropuerto_destino?: { ciudad?: string | null; codigo_iata?: string | null } | null;
   puertaEmbarqueId?: number | null;
   numeroVuelo: string;
+  numero_vuelo?: string | null;
   fechaSalida: string;
   fechaLlegada: string;
   estado: FlightStatus;

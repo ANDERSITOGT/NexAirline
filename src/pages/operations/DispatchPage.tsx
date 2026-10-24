@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Check, ClipboardCheck, Loader2, ShoppingCart } from "lucide-react";
 import { AppBreadcrumb } from "@/components/navigation/AppBreadcrumb";
@@ -124,6 +124,7 @@ export default function DispatchPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [openSearch, setOpenSearch] = useState(false);
   const [isSaleDialogOpen, setIsSaleDialogOpen] = useState(false);
+  const successNoticeTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const [search, setSearch] = useState("");
   const closedFlight = flight?.estado === "EN_VUELO" || flight?.estado === "FINALIZADO" || flight?.estado === "CANCELADO";
   const availableStatusOptions = useMemo<ManualSeatStatus[]>(() => (
@@ -287,10 +288,32 @@ export default function DispatchPage() {
 
   const handleSaleCompleted = useCallback((response: VentaMostradorResponse) => {
     setError(null);
+    setSelected((current) => current ? { ...current, estado: "CONFIRMADO" } : current);
     const ticket = response.boleto?.numero_boleto ?? response.numero_boleto ?? response.boleto?.numero;
     setNotice({ kind: "success", message: ticket ? `Venta confirmada. Boleto ${ticket}` : "Venta confirmada correctamente." });
+    if (successNoticeTimer.current) {
+      window.clearTimeout(successNoticeTimer.current);
+    }
+    successNoticeTimer.current = window.setTimeout(() => {
+      setNotice(null);
+      successNoticeTimer.current = null;
+    }, 5000);
     void refreshSeatInventory().catch((cause) => setNotice({ kind: "error", message: errorMessage(cause) }));
   }, [refreshSeatInventory]);
+
+  useEffect(() => () => {
+    if (successNoticeTimer.current) {
+      window.clearTimeout(successNoticeTimer.current);
+    }
+  }, []);
+
+  const dismissNotice = () => {
+    if (successNoticeTimer.current) {
+      window.clearTimeout(successNoticeTimer.current);
+      successNoticeTimer.current = null;
+    }
+    setNotice(null);
+  };
 
   const handleSaleError = useCallback((message: string) => {
     setNotice({ kind: "error", message });
@@ -344,7 +367,31 @@ export default function DispatchPage() {
           Centro de Despacho y Check-in
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {flight?.numeroVuelo ?? "Vuelo"} · {plane?.matricula ?? "Sin aeronave"} · estado físico en vivo
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="text-sm font-semibold text-foreground">
+              {flight?.numero_vuelo || flight?.numeroVuelo || `Vuelo #${vueloId}`}
+            </span>
+            <span>•</span>
+            <span>
+              {flight?.ruta?.aeropuerto_origen?.ciudad
+                || flight?.aeropuerto_origen?.ciudad
+                || "Origen"} ({flight?.ruta?.aeropuerto_origen?.codigo_iata
+                || flight?.aeropuerto_origen?.codigo_iata
+                || "IATA"})
+              {" ➔ "}
+              {flight?.ruta?.aeropuerto_destino?.ciudad
+                || flight?.aeropuerto_destino?.ciudad
+                || "Destino"} ({flight?.ruta?.aeropuerto_destino?.codigo_iata
+                || flight?.aeropuerto_destino?.codigo_iata
+                || "IATA"})
+            </span>
+            <span>•</span>
+            <span>Matrícula: {flight?.avion?.matricula || plane?.matricula || "TG-TJA"}</span>
+            <span>•</span>
+            <Badge variant="outline" className="text-[10px] uppercase">
+              {flight?.estado || "—"}
+            </Badge>
+          </div>
         </p>
       </div>
       {!loading && error && (
@@ -413,13 +460,21 @@ export default function DispatchPage() {
             {notice && (
               <div
                 role={notice.kind === "error" ? "alert" : "status"}
-                className={`rounded-md border px-3 py-2 text-sm ${
+                className={`relative rounded-md border px-3 py-2 pr-8 text-sm transition-opacity duration-300 ${
                   notice.kind === "error"
                     ? "border-bad/30 bg-bad-bg text-bad"
                     : "border-ok/30 bg-ok-bg text-ok"
                 }`}
               >
                 {notice.message}
+                <button
+                  type="button"
+                  aria-label="Cerrar notificación"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-current opacity-70 transition-opacity hover:opacity-100"
+                  onClick={dismissNotice}
+                >
+                  ✕
+                </button>
               </div>
             )}
             <section className="space-y-3">
@@ -581,6 +636,7 @@ export default function DispatchPage() {
           key={`${selected.id}-${isSaleDialogOpen ? "open" : "closed"}`}
           open={isSaleDialogOpen && !closedFlight}
           vueloId={Number(vueloId)}
+          flightNumber={flight?.numero_vuelo || flight?.numeroVuelo || `Vuelo ${vueloId}`}
           seatId={selected.vueloAsientoId}
           seatLabel={`Asiento ${selected.numero}`}
           seatClass={typeNames.get(selected.tipoAsientoId) ?? "Sin clase"}

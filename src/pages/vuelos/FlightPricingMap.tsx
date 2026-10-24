@@ -28,6 +28,8 @@ import {
   type VueloAsiento,
   type VueloSeatStatus,
 } from "@/services/vueloAsientoService";
+import { usePreferences } from "@/contexts/usePreferences";
+import { formatDate } from "@/utils/dateUtils";
 
 const TYPE_COLORS = [
   "border-blue-900 bg-blue-900 text-white",
@@ -62,15 +64,6 @@ const formatCurrency = (value: number | null) =>
         currency: "USD",
       }).format(value);
 
-const formatDate = (value?: string) =>
-  value
-    ? new Intl.DateTimeFormat("es-GT", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }).format(new Date(value))
-    : "Sin fecha";
-
 const getCommercialSeatId = (seat: VueloAsiento) => seat.asientoId ?? seat.asiento_id;
 
 const mergeSeats = (physicalSeats: Seat[], commercial: VueloAsiento[]): CommercialSeat[] =>
@@ -86,6 +79,7 @@ const mergeSeats = (physicalSeats: Seat[], commercial: VueloAsiento[]): Commerci
   });
 
 export default function FlightPricingMap() {
+  const { timezone } = usePreferences();
   const { vueloId } = useParams<{ vueloId: string }>();
   const parsedVueloId = Number(vueloId);
   const [flight, setFlight] = useState<Flight | null>(null);
@@ -289,7 +283,7 @@ export default function FlightPricingMap() {
                 <div>
                   <CardTitle>{flight?.numeroVuelo ?? "Vuelo"}</CardTitle>
                   <CardDescription className="mt-1">
-                    Ruta {flight?.rutaId ?? "—"} · {plane?.matricula ?? "Sin aeronave"} · {formatDate(flight?.fechaSalida)}
+                    Ruta {flight?.rutaId ?? "—"} · {plane?.matricula ?? "Sin aeronave"} · {formatDate(flight?.fechaSalida, timezone)}
                   </CardDescription>
                 </div>
                 <span className="font-mono text-xs text-muted-foreground">

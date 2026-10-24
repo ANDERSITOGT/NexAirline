@@ -24,6 +24,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { errores, roles, usuarios as seedUsers, type Usuario } from "@/data2";
+import { usePreferences } from "@/contexts/usePreferences";
+import { formatDateTime } from "@/utils/dateUtils";
 
 type SecurityTab = "usuarios" | "errores";
 type UserDraft = Pick<Usuario, "nombre" | "correo" | "rol"> & {
@@ -50,6 +52,7 @@ const errorColor: Record<string, string> = {
 };
 
 export default function Security() {
+  const { timezone } = usePreferences();
   const [tab, setTab] = useState<SecurityTab>("usuarios");
   const [users, setUsers] = useState(seedUsers);
   const [type, setType] = useState("");
@@ -271,7 +274,7 @@ export default function Security() {
                         className={`cursor-pointer border-white/10 hover:bg-white/5 ${selectedError === error.id ? "bg-white/10" : ""}`}
                       >
                         <TableCell className="px-5 py-2 text-white/45">
-                          {error.fecha.slice(5)}
+                          {formatDateTime(error.fecha, timezone)}
                         </TableCell>
                         <TableCell
                           className={`px-4 py-2 ${errorColor[error.tipo] ?? "text-white"}`}
