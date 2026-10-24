@@ -90,7 +90,7 @@ const errorMessage = (cause: unknown) =>
   cause instanceof Error ? cause.message : "No se pudo completar la operación.";
 
 const mergeInventory = (
-  seats: Seat[],
+seats: Seat[],
   inventory: Awaited<ReturnType<typeof getInventario>>,
 ) : DispatchSeat[] =>
   seats.map((seat) => {
@@ -101,7 +101,7 @@ const mergeInventory = (
     return {
       ...seat,
       estado: estado && STATUS_LABELS[estado] ? estado : "DISPONIBLE",
-      vueloAsientoId: commercial?.id,
+      vueloAsientoId: commercial?.vueloAsientoId,
       precio: commercial?.precio,
     };
   });
@@ -114,7 +114,7 @@ export default function DispatchPage() {
   const [seatTypes, setSeatTypes] = useState<SeatType[]>([]);
   const [inventoryLoaded, setInventoryLoaded] = useState(false);
   const [seats, setSeats] = useState<DispatchSeat[]>([]);
-  const [selected, setSelected] = useState<DispatchSeat | null>(null);
+  const [selected, setSelected] = useState<DispatchSeat | null>();
   const [nextStatus, setNextStatus] = useState<ManualSeatStatus | "">("");
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(true);
@@ -168,7 +168,6 @@ export default function DispatchPage() {
     setError(null);
     try {
       const loadedFlight = await getVueloById(parsedVueloId);
-      console.log("DEBUG VUELO:", loadedFlight);
       const planeId =
         loadedFlight.avion_id || loadedFlight.avionId || loadedFlight.avion?.id;
       if (!planeId || planeId <= 0) {

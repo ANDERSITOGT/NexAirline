@@ -27,6 +27,7 @@ export interface DispatchInventorySeat {
   asiento_id?: number;
   precio: number | null;
   estado: DispatchSeatStatus;
+  vueloAsientoId: number;
 }
 
 export async function getInventario(
