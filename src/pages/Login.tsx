@@ -80,21 +80,18 @@ export const Login = () => {
         </div>
 
         <div className="absolute bottom-12 left-12 z-40 flex max-w-md flex-col gap-4">
-          <div className="inline-flex w-fit items-center gap-2 rounded-full border border-slate-700/50 bg-slate-900/80 px-3 py-1 text-xs font-mono text-slate-300 backdrop-blur-sm">
-            <Settings className="size-3 text-orange-500" />
-            SISTEMA OPERATIVO AEROPORTUARIO V4.2
-          </div>
+
           <h1 className="text-5xl font-extrabold leading-[1.1] tracking-tight text-white">
-            Control de Flota, <br />
-            <span className="bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent">Despacho</span> &amp; Gestión Comercial
+            <br />
+            <span className="bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent"> </span> 
           </h1>
           <p className="text-sm leading-relaxed text-slate-400">
-            Plataforma unificada para operaciones en tierra, cabina y conciliación financiera en tiempo real.
+            Plataforma unificada para operaciones Administrativas
           </p>
           <div className="flex flex-wrap gap-2">
             <div className="inline-flex items-center gap-2 rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-[10px] text-slate-300 backdrop-blur-sm">
               <Satellite className="size-3 text-sky-400" />
-              99.8% Puntualidad en red
+              
             </div>
             <div className="inline-flex items-center gap-2 rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-[10px] text-slate-300 backdrop-blur-sm">
               <Shield className="size-3 text-emerald-400" />

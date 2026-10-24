@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  Plane, LayoutDashboard, PlaneTakeoff, Ticket, ChevronDown, ChevronRight, ChevronUp, Bell, Search, LogOut,
+  Plane, LayoutDashboard, PlaneTakeoff, Ticket, ChevronDown, ChevronUp, Bell, BellOff, Search, LogOut,
   Building2, Armchair, Shuffle, CreditCard, ShieldCheck, ScrollText, MoreHorizontal, Home, Menu,
   Languages, Clock3, Check, Shield,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { endSession, getCurrentUser } from "@/lib/auth";
@@ -65,15 +64,10 @@ const nav: NavGroup[] = [
    ] },
 ];
 
-const allItems = nav.flatMap((group) => group.items);
 const pageFromPath = (pathname: string): Page => {
   if (pathname === "/vuelos/nuevo") return "nuevo";
   return pathname.split("/")[1] || "dashboard";
 };
-const labelOf = (page: Page) =>
-  page === "nuevo" ? "Programar vuelo" : allItems.find((item) => item.id === page)?.label ?? page;
-const groupOf = (page: Page) =>
-  nav.find((group) => group.items.some((item) => item.id === page || (page === "nuevo" && item.id === "vuelos")))?.name ?? "Operaciones";
 const getStringProperty = (value: unknown, key: string) => {
   if (!value || typeof value !== "object") return "";
   const property = (value as Record<string, unknown>)[key];
@@ -91,7 +85,13 @@ function Logo() {
   );
 }
 
-function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+function Sidebar({
+  onNavigate,
+  isCollapsed = false,
+}: {
+  onNavigate?: () => void;
+  isCollapsed?: boolean;
+}) {
   const [closed, setClosed] = useState<Record<string, boolean>>({});
   const { pathname } = useLocation();
   const activeId = pageFromPath(pathname) === "nuevo" ? "vuelos" : pageFromPath(pathname);
@@ -101,18 +101,23 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   })).filter((group) => group.items.length > 0);
 
   return (
-    <ScrollArea className="min-h-0 flex-1 px-3 py-4 [&>[data-radix-scroll-area-viewport]]:max-h-full">
+    <ScrollArea className={cn(
+      "min-h-0 flex-1 py-4 [&>[data-radix-scroll-area-viewport]]:max-h-full",
+      isCollapsed ? "px-2" : "px-3",
+    )}>
       <nav className="space-y-1">
         {visibleNav.map((group) => (
           <div key={group.name} className="mb-2">
-            <button
-              onClick={() => setClosed({ ...closed, [group.name]: !closed[group.name] })}
-              className="flex w-full items-center justify-between rounded px-2 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/50 hover:text-white/80"
-            >
-              {group.name}
-              <ChevronDown className={`size-3.5 transition-transform ${closed[group.name] ? "-rotate-90" : ""}`} />
-            </button>
-            {!closed[group.name] &&
+            {!isCollapsed && (
+              <button
+                onClick={() => setClosed({ ...closed, [group.name]: !closed[group.name] })}
+                className="flex w-full items-center justify-between rounded px-2 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-slate-100/80 hover:text-white"
+              >
+                {group.name}
+                <ChevronDown className={`size-3.5 transition-transform ${closed[group.name] ? "-rotate-90" : ""}`} />
+              </button>
+            )}
+            {(!closed[group.name] || isCollapsed) &&
               group.items.map((item) => {
                 const on = item.href ? pathname === item.href : activeId === item.id;
                 return (
@@ -120,11 +125,12 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                     key={item.id}
                     to={item.href ?? `/${item.id}`}
                     onClick={onNavigate}
-                    className={`relative mt-0.5 flex w-full items-center gap-3 rounded-md px-2.5 py-1.5 text-sm transition-colors ${on ? "bg-white/10 font-medium text-white" : "text-white/70 hover:bg-white/5 hover:text-white"}`}
+                    title={isCollapsed ? item.label : undefined}
+                    className={`relative mt-0.5 flex w-full items-center rounded-md py-1.5 text-sm transition-colors ${isCollapsed ? "justify-center px-2" : "gap-3 px-2.5"} ${on ? "bg-slate-800/50 font-medium text-white" : "text-slate-300 hover:bg-slate-800/50 hover:text-white"}`}
                   >
                     {on && <span className="absolute top-2 bottom-2 -left-3 w-[3px] rounded-r bg-accent" />}
                     <item.icon className="size-[18px]" />
-                    {item.label}
+                    <span className={cn("overflow-hidden whitespace-nowrap", isCollapsed && "hidden")}>{item.label}</span>
                   </NavLink>
                 );
               })}
@@ -145,6 +151,7 @@ const supportedTimeZones = Intl.supportedValuesOf("timeZone");
 
 export default function Shell() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isTimezoneOpen, setIsTimezoneOpen] = useState(false);
   const [timezoneSearch, setTimezoneSearch] = useState("");
   const [openSearch, setOpenSearch] = useState(false);
@@ -185,9 +192,6 @@ export default function Shell() {
     );
   const page = pageFromPath(pathname);
   const activeId = page === "nuevo" ? "vuelos" : page;
-  const crumbs = page === "nuevo"
-    ? ["AstraCode Air", groupOf(page), "Vuelos", "Programar vuelo"]
-    : ["AstraCode Air", groupOf(page), labelOf(page)];
   const handleLogout = () => {
     endSession();
     navigate("/login", { replace: true });
@@ -201,33 +205,154 @@ export default function Shell() {
   }, [pathname]);
 
   return (
-    <div className="flex h-screen w-full min-w-0 overflow-x-hidden bg-background">
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-900 text-slate-200">
+      <header className="flex h-14 w-full flex-none items-center justify-between bg-slate-900 px-4">
+        <div className="flex w-1/4 min-w-fit items-center gap-3">
+          <div className="shrink-0 [&_*]:text-white"><Logo /></div>
+          <button
+            type="button"
+            onClick={() => setIsSidebarCollapsed((collapsed) => !collapsed)}
+            aria-label={isSidebarCollapsed ? "Expandir menú lateral" : "Colapsar menú lateral"}
+            aria-expanded={!isSidebarCollapsed}
+            className="hidden rounded-md p-2 text-slate-100 transition-colors hover:bg-white/10 hover:text-white md:inline-flex"
+          >
+            <Menu className="h-5 w-5 text-slate-100 transition-colors hover:text-white" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen(true)}
+            aria-label="Abrir menú"
+            className="rounded-md p-2 text-slate-100 transition-colors hover:bg-white/10 hover:text-white md:hidden"
+          >
+            <Menu className="h-5 w-5 text-slate-100 transition-colors hover:text-white" />
+          </button>
+        </div>
+        <div className="relative mx-auto hidden w-full max-w-lg flex-1 md:block">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            readOnly
+            placeholder="Buscar módulo, vuelo, reserva..."
+            onClick={() => setOpenSearch(true)}
+            onFocus={() => setOpenSearch(true)}
+            aria-label="Abrir búsqueda global"
+            className="w-full cursor-pointer rounded-full border border-slate-700/50 bg-slate-800/50 py-1.5 pl-10 pr-4 text-sm text-white placeholder-slate-400 transition-all focus:bg-slate-800 focus:border-orange-500/50 focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+          />
+        </div>
+        <div className="flex w-1/4 items-center justify-end gap-4 sm:gap-6">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-100 transition-colors hover:text-white">
+                <Languages className="size-4" />
+                {language.toUpperCase()}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Idioma</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={language}
+                onValueChange={(value) => setLanguage(value as "es" | "en")}
+              >
+                <DropdownMenuRadioItem value="es">ES</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="en">EN</DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Popover
+            open={isTimezoneOpen}
+            onOpenChange={setIsTimezoneOpen}
+            modal={false}
+          >
+            <PopoverTrigger asChild>
+              <button type="button" className="flex max-w-52 cursor-pointer items-center gap-2 truncate text-sm font-medium text-slate-100 transition-colors hover:text-white">
+                <Clock3 className="size-4 shrink-0" />
+                <span className="truncate">{timezone}</span>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-80 p-0">
+              <Command shouldFilter={false}>
+                <CommandInput
+                  placeholder="Buscar zona horaria..."
+                  value={timezoneSearch}
+                  onValueChange={setTimezoneSearch}
+                />
+                <CommandList>
+                  {filteredTimeZones.length === 0 ? (
+                    <CommandEmpty>No se encontró la zona horaria.</CommandEmpty>
+                  ) : (
+                    <CommandGroup heading="Zonas horarias">
+                      <div role="listbox" className="max-h-60 overflow-y-auto p-1">
+                        {filteredTimeZones.map((zone) => (
+                          <button
+                            key={zone}
+                            type="button"
+                            role="option"
+                            aria-selected={timezone === zone}
+                            className="flex w-full cursor-pointer items-center rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+                            onClick={() => selectTimezone(zone)}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 size-4 shrink-0",
+                                timezone === zone ? "opacity-100" : "opacity-0",
+                              )}
+                            />
+                            {zone}
+                          </button>
+                        ))}
+                      </div>
+                    </CommandGroup>
+                  )}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" aria-label="Notificaciones" className="relative cursor-pointer rounded-md p-2 text-slate-100 transition-colors hover:bg-white/10 hover:text-white">
+                <Bell className="h-5 w-5 text-slate-100 transition-colors hover:text-white" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64 rounded-xl border border-slate-200 bg-white p-4 text-center shadow-lg">
+              <BellOff className="mx-auto mb-2 h-8 w-8 text-slate-300" />
+              <p className="text-sm font-medium text-slate-900">No hay notificaciones</p>
+              <p className="mt-1 text-xs text-slate-500">Estás al día con todas las alertas.</p>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
+      <div className="flex flex-1 overflow-hidden pr-2 pb-2">
       <aside
         className={cn(
-          "hidden h-full shrink-0 flex-col border-r bg-[#0b132b] text-white md:flex md:w-64",
+          "hidden flex-none flex-col pt-2 text-slate-200 transition-all duration-300 ease-in-out md:flex",
+          isSidebarCollapsed ? "w-16 items-center" : "w-64 px-3",
         )}
       >
-        <div className="flex h-14 shrink-0 items-center border-b border-white/10 px-4">
-          <Logo />
-        </div>
-        <Sidebar />
-        <div className="mt-auto border-t border-slate-800/80 p-3">
+        <Sidebar isCollapsed={isSidebarCollapsed} />
+        <div className={cn(
+          "mt-auto w-full border-t border-white/10",
+          isSidebarCollapsed ? "p-2" : "p-3",
+        )}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="group flex w-full items-center justify-between gap-3 rounded-xl p-2 text-left transition-colors hover:bg-slate-800/60 focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+                aria-label={isSidebarCollapsed ? `Perfil de ${userFullName}` : undefined}
+                className={cn(
+                  "group flex w-full items-center rounded-xl p-2 text-left transition-colors hover:bg-white/10 focus:outline-none focus:ring-1 focus:ring-orange-500/50",
+                  isSidebarCollapsed ? "justify-center" : "justify-between gap-3",
+                )}
               >
-                <div className="flex min-w-0 items-center gap-3">
+                <div className={cn("flex min-w-0 items-center", isSidebarCollapsed ? "justify-center" : "gap-3")}>
                   <div className="flex size-9 shrink-0 items-center justify-center rounded-full border border-slate-700/60 bg-slate-800 text-xs font-bold text-orange-400 shadow-sm group-hover:border-orange-500/40">
                     {userInitials}
                   </div>
-                  <div className="min-w-0 flex-1">
+                  {!isSidebarCollapsed && <div className="min-w-0 flex-1 overflow-hidden whitespace-nowrap">
                     <div className="truncate text-xs font-semibold text-slate-100">{userFullName}</div>
                     <div className="truncate text-[11px] capitalize text-slate-400">{userRole}</div>
-                  </div>
+                  </div>}
                 </div>
-                <ChevronUp className="size-4 shrink-0 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
+                {!isSidebarCollapsed && <ChevronUp className="size-4 shrink-0 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />}
               </button>
             </DropdownMenuTrigger>
 
@@ -275,124 +400,14 @@ export default function Shell() {
         </div>
       </aside>
 
-      <div className="flex h-full min-w-0 w-full flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur sm:px-6">
-          <div className="flex items-center">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="mr-2 md:hidden"
-              aria-label="Abrir menú"
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
-            <div className="lg:hidden"><Logo /></div>
+        <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-tl-3xl border border-slate-700/30 bg-slate-50 text-slate-900 shadow-2xl mr-2 mb-2">
+          <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-20 md:p-8 md:pb-8">
+            <div className="mx-auto w-full max-w-[1280px] min-w-0"><Outlet /></div>
           </div>
-          {!pathname.startsWith("/infraestructura") && !pathname.startsWith("/flota") && !pathname.startsWith("/ventas") && !pathname.startsWith("/operaciones") && !pathname.startsWith("/seguridad") && (
-            <ol className="hidden items-center gap-1.5 text-sm text-muted-foreground lg:flex">
-              {crumbs.map((crumb, index) => (
-                <li key={`${crumb}-${index}`} className="flex items-center gap-1.5">
-                  {index > 0 && <ChevronRight className="size-3.5" />}
-                  <span className={index === crumbs.length - 1 ? "font-medium text-foreground" : ""}>{crumb}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-          <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="gap-1.5">
-                  <Languages className="size-4" />
-                  {language.toUpperCase()}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Idioma</DropdownMenuLabel>
-                <DropdownMenuRadioGroup
-                  value={language}
-                  onValueChange={(value) => setLanguage(value as "es" | "en")}
-                >
-                  <DropdownMenuRadioItem value="es">ES</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="en">EN</DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Popover
-              open={isTimezoneOpen}
-              onOpenChange={setIsTimezoneOpen}
-              modal={false}
-            >
-              <PopoverTrigger asChild>
-                <Button variant="ghost" size="sm" className="max-w-52 gap-1.5">
-                  <Clock3 className="size-4 shrink-0" />
-                  <span className="truncate">{timezone}</span>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-80 p-0">
-                <Command shouldFilter={false}>
-                  <CommandInput
-                    placeholder="Buscar zona horaria..."
-                    value={timezoneSearch}
-                    onValueChange={setTimezoneSearch}
-                  />
-                  <CommandList>
-                    {filteredTimeZones.length === 0 ? (
-                      <CommandEmpty>No se encontró la zona horaria.</CommandEmpty>
-                    ) : (
-                      <CommandGroup heading="Zonas horarias">
-                        <div role="listbox" className="max-h-60 overflow-y-auto p-1">
-                          {filteredTimeZones.map((zone) => (
-                            <button
-                              key={zone}
-                              type="button"
-                              role="option"
-                              aria-selected={timezone === zone}
-                              className="flex w-full cursor-pointer items-center rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-                              onClick={() => selectTimezone(zone)}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 size-4 shrink-0",
-                                  timezone === zone ? "opacity-100" : "opacity-0",
-                                )}
-                              />
-                              {zone}
-                            </button>
-                          ))}
-                        </div>
-                      </CommandGroup>
-                    )}
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-            <button
-              type="button"
-              onClick={() => setOpenSearch(true)}
-              className="hidden h-9 w-64 items-center justify-between rounded-lg border border-input bg-background/60 px-3 text-xs text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:flex"
-              aria-label="Abrir búsqueda global"
-            >
-              <span className="flex items-center gap-2">
-                <Search className="size-3.5" />
-                Buscar módulo, vuelo, reserva...
-              </span>
-              <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium">
-                <span className="text-xs">⌘</span>K
-              </kbd>
-            </button>
-            <button aria-label="Notificaciones" className="relative rounded-md p-2 hover:bg-muted">
-              <Bell className="size-5" />
-              <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-accent ring-2 ring-card" />
-            </button>
-          </div>
-        </header>
-        <GlobalSearchDialog open={openSearch} onOpenChange={setOpenSearch} />
-
-        <main className="w-full min-w-0 flex-1 overflow-y-auto px-4 py-6 pb-20 sm:px-6 lg:px-8 lg:pb-6">
-          <div className="mx-auto w-full max-w-[1280px] min-w-0"><Outlet /></div>
         </main>
+      </div>
 
+      <GlobalSearchDialog open={openSearch} onOpenChange={setOpenSearch} />
         <nav className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 border-t border-border bg-card md:hidden">
           {bottom.map((item) => {
             const on = activeId === item.id;
@@ -425,7 +440,6 @@ export default function Shell() {
             </SheetContent>
           </Sheet>
         </nav>
-      </div>
     </div>
   );
 }
